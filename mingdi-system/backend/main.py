@@ -17,7 +17,8 @@ from .config import settings
 from .models import SensorData, FlightStatus, ShapeComparisonRequest, VolleySimulationRequest, LaunchExperienceRequest
 from .influx_client import InfluxDBStore
 from .message_bus import MessageBus, CHANNELS
-from .physics import AeroDynamicsSimulator, AeroAcousticsSimulator, ShapeAwareAeroSimulator, CrossEraAcousticComparator, VolleySimulation, AudioSynthesisParams, SHAPE_PROFILES
+from .physics import AeroDynamicsSimulator, AeroAcousticsSimulator, ShapeAwareAeroSimulator, CrossEraAcousticComparator, VolleySimulation, AudioSynthesisParams, SHAPE_PROFILES, BinauralSpatialAudio, get_shape_data_quality, VolleyArrowConfig
+from .config_loader import list_modern_whistle_models
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -84,7 +85,7 @@ async def lifespan(app: FastAPI):
     shape_aero_sim = ShapeAwareAeroSimulator()
     cross_era_comparator = CrossEraAcousticComparator()
     volley_sim = VolleySimulation()
-    audio_params = AudioSynthesisParams()
+    audio_params = None
 
     bus_thread = threading.Thread(target=_start_bus_thread, daemon=True)
     bus_thread.start()
@@ -412,7 +413,18 @@ async def get_flow_streamlines(
 
 @app.get("/api/shapes/profiles")
 async def get_shape_profiles():
-    return {"shapes": list(SHAPE_PROFILES.keys()), "profiles": SHAPE_PROFILES}
+    shape_quality = {s: get_shape_data_quality(s) for s in SHAPE_PROFILES}
+    return {"shapes": list(SHAPE_PROFILES.keys()),
+            "profiles": SHAPE_PROFILES,
+            "data_quality": shape_quality,
+            "provenance_scale": ["windtunnel (实验测定)", "archaeology (考古实物)", "literature (文献)", "fallback (理论推断)"]}
+
+
+@app.get("/api/acoustics/modern-whistle-models")
+async def get_modern_whistle_models():
+    return {"default_model": "fox40_classic",
+            "models": list_modern_whistle_models(),
+            "certifications": ["FIFA", "FIBA", "FINA", "IOC", "NCAA"]}
 
 
 @app.get("/api/shapes/compare")
@@ -446,13 +458,18 @@ async def cross_era_comparison(
     velocity: float = Query(..., gt=0),
     rotation_speed: float = Query(100.0),
     distance: float = Query(1.0),
-    modern_whistle_length: float = Query(0.025),
-    modern_whistle_diameter: float = Query(0.012)
+    modern_model: str = Query("fox40_classic", description="现代口哨标准型号，如 fox40_classic / acme_thunderer_58 / molten_dolfin / fox40_mini"),
+    modern_whistle_length: float = Query(None, description="手动覆盖现代口哨长度m，None时使用型号标准值"),
+    modern_whistle_diameter: float = Query(None, description="手动覆盖现代口哨直径m，None时使用型号标准值")
 ):
     try:
         result = cross_era_comparator.compare(
-            velocity, rotation_speed, distance,
-            modern_whistle_length, modern_whistle_diameter
+            velocity=velocity,
+            rotation_speed=rotation_speed,
+            distance=distance,
+            modern_model=modern_model,
+            modern_whistle_length=modern_whistle_length,
+            modern_whistle_diameter=modern_whistle_diameter,
         )
         return result
     except Exception as e:
@@ -463,99 +480,197 @@ async def cross_era_comparison(
 @app.post("/api/volley/simulate")
 async def simulate_volley(req: VolleySimulationRequest):
     try:
-        arrows_data = []
+        backend = getattr(req, "backend", "numpy") or "numpy"
+        sim = VolleySimulation(backend=backend)
+        new_arrows = []
         for a in req.arrows:
-            arrows_data.append({
-                "arrow_id": a.arrow_id,
-                "velocity": a.velocity,
-                "rotation_speed": a.rotation_speed,
-                "whistle_frequency": a.whistle_frequency,
-                "sound_pressure_level": a.sound_pressure_level,
-                "position": tuple(a.position),
-            })
-        result = volley_sim.simulate_volley(
-            arrows=arrows_data,
-            grid_size=req.grid_size,
-            grid_spacing=req.grid_spacing,
-            observer_position=tuple(req.observer_position),
+            pos = list(a.position) if a.position else [0, 0]
+            if len(pos) < 2:
+                pos = pos + [0] * (2 - len(pos))
+            x, y = float(pos[0]), float(pos[1])
+            z = 1.6
+            if len(pos) >= 3:
+                z = float(pos[2])
+            aid = a.arrow_id if hasattr(a, "arrow_id") else f"v-{id(a)}"
+            try:
+                id_int = int(str(aid).split("-")[-1]) if hasattr(a, "arrow_id") else len(new_arrows) + 1
+            except Exception:
+                id_int = len(new_arrows) + 1
+            new_arrows.append(VolleyArrowConfig(
+                id=id_int,
+                x=x, y=y, z=z,
+                velocity=a.velocity,
+                rotation_speed=a.rotation_speed,
+                shape_profile=getattr(a, "shape_profile", "conical") or "conical",
+                spl_1m=a.sound_pressure_level,
+                frequency=a.whistle_frequency,
+            ))
+        gs = int(req.grid_size)
+        extent = float(req.grid_spacing) * float(gs)
+        obs = list(req.observer_position) if req.observer_position else [0.0, 0.0, 1.5]
+        while len(obs) < 3:
+            obs.append(1.5 if len(obs) == 2 else 0.0)
+        result = sim.simulate_volley(
+            arrows=new_arrows,
+            grid_size=gs,
+            grid_extent=extent,
+            observer_height=float(obs[2]),
+            interference_threshold_db=3.0,
+        )
+        observer_heading_deg = 0.0
+        audio = sim.get_audio_synthesis_params(
+            volley_result=result,
+            listener_position=(float(obs[0]), float(obs[1]), float(obs[2])),
+            listener_heading_deg=observer_heading_deg,
+            duration_sec=2.5,
+        )
+        source_position = result.get("sound_centroid_m")
+        if source_position and len(source_position) >= 2:
+            sp = (source_position[0], source_position[1], float(obs[2]))
+        else:
+            sp = (float(obs[0]) + 5.0, float(obs[1]), float(obs[2]))
+        result["audio_synthesis"] = audio.calculate(
+            binaural=True,
+            source_position=sp,
+            observer_heading_deg=observer_heading_deg,
         )
         return result
     except Exception as e:
         logger.error(f"Error in volley simulation: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/api/volley/preset")
 async def volley_preset(
-    pattern: str = Query("line", description="齐射阵型: line, wedge, arc, random"),
+    pattern: str = Query("line", description="齐射阵型: line, wedge, arc, random, marching_10, ambush_20, scouts_3, single"),
     count: int = Query(5, ge=1, le=20),
     velocity: float = Query(65.0, gt=0),
     rotation_speed: float = Query(100.0),
-    spacing: float = Query(5.0, gt=0)
+    spacing: float = Query(5.0, gt=0),
+    backend: str = Query("numpy", description="加速后端: numpy / cupy / auto"),
 ):
     try:
-        arrows = []
+        from .volley_simulation import create_preset_volley
+        sim = VolleySimulation(backend=backend)
+        presets_known = ("marching_10", "ambush_20", "scouts_3", "single")
+        if pattern in presets_known:
+            preset_arrows = create_preset_volley(pattern)
+            for a in preset_arrows:
+                a.velocity = velocity
+                a.rotation_speed = rotation_speed
+            result = sim.simulate_volley(arrows=preset_arrows)
+            result["pattern"] = pattern
+            audio = sim.get_audio_synthesis_params(volley_result=result, listener_position=(0, 0, 1.5))
+            result["audio_synthesis"] = audio.calculate(binaural=True, source_position=(10, 0, 1.5))
+            return result
+
         acoustics_sim_local = AeroAcousticsSimulator()
         ac_result = acoustics_sim_local.simulate(velocity, rotation_speed, 1.0)
+        preset_arrows = []
+        shape_cycle = ["conical", "spherical", "blunt", "ogival"]
 
         if pattern == "line":
             for i in range(count):
                 x = (i - count / 2) * spacing
-                arrows.append({
-                    "arrow_id": f"volley-{i+1}",
-                    "velocity": velocity,
-                    "rotation_speed": rotation_speed,
-                    "whistle_frequency": ac_result["whistle_frequency"],
-                    "sound_pressure_level": ac_result["sound_pressure_level"],
-                    "position": (x, 0.0),
-                })
+                preset_arrows.append(VolleyArrowConfig(
+                    id=i + 1, x=x, y=0.0, z=1.5,
+                    velocity=velocity, rotation_speed=rotation_speed,
+                    shape_profile=shape_cycle[i % 4],
+                    spl_1m=ac_result["sound_pressure_level"],
+                    frequency=ac_result["whistle_frequency"],
+                ))
         elif pattern == "wedge":
             for i in range(count):
                 row = i // 2
                 side = 1 if i % 2 == 0 else -1
                 x = side * (row + 1) * spacing * 0.5
                 y = row * spacing
-                arrows.append({
-                    "arrow_id": f"volley-{i+1}",
-                    "velocity": velocity,
-                    "rotation_speed": rotation_speed,
-                    "whistle_frequency": ac_result["whistle_frequency"],
-                    "sound_pressure_level": ac_result["sound_pressure_level"],
-                    "position": (x, y),
-                })
+                preset_arrows.append(VolleyArrowConfig(
+                    id=i + 1, x=x, y=y, z=1.5,
+                    velocity=velocity, rotation_speed=rotation_speed,
+                    shape_profile=shape_cycle[i % 4],
+                    spl_1m=ac_result["sound_pressure_level"],
+                    frequency=ac_result["whistle_frequency"],
+                ))
         elif pattern == "arc":
             import random
-            radius = count * spacing / (2 * math.pi)
+            radius = max(count * spacing / (2 * math.pi), spacing)
             for i in range(count):
                 angle = math.pi * (i / max(count - 1, 1) - 0.5)
                 x = radius * math.sin(angle)
                 y = radius * (1 - math.cos(angle))
-                arrows.append({
-                    "arrow_id": f"volley-{i+1}",
-                    "velocity": velocity + random.uniform(-2, 2),
-                    "rotation_speed": rotation_speed,
-                    "whistle_frequency": ac_result["whistle_frequency"],
-                    "sound_pressure_level": ac_result["sound_pressure_level"],
-                    "position": (x, y),
-                })
+                preset_arrows.append(VolleyArrowConfig(
+                    id=i + 1, x=round(x, 2), y=round(y, 2), z=1.6,
+                    velocity=velocity + random.uniform(-2, 2),
+                    rotation_speed=rotation_speed,
+                    shape_profile=shape_cycle[i % 4],
+                    spl_1m=ac_result["sound_pressure_level"],
+                    frequency=ac_result["whistle_frequency"],
+                ))
         else:
             import random
             for i in range(count):
-                arrows.append({
-                    "arrow_id": f"volley-{i+1}",
-                    "velocity": velocity + random.uniform(-5, 5),
-                    "rotation_speed": rotation_speed + random.uniform(-10, 10),
-                    "whistle_frequency": ac_result["whistle_frequency"],
-                    "sound_pressure_level": ac_result["sound_pressure_level"],
-                    "position": (random.uniform(-count*spacing/2, count*spacing/2), random.uniform(-spacing, spacing)),
-                })
-
-        result = volley_sim.simulate_volley(arrows=arrows, grid_size=40, grid_spacing=2.0, observer_position=(0.0, 50.0))
+                preset_arrows.append(VolleyArrowConfig(
+                    id=i + 1,
+                    x=round(random.uniform(-count * spacing / 2, count * spacing / 2), 2),
+                    y=round(random.uniform(-spacing, spacing), 2),
+                    z=1.5,
+                    velocity=velocity + random.uniform(-5, 5),
+                    rotation_speed=rotation_speed + random.uniform(-10, 10),
+                    shape_profile=shape_cycle[i % 4],
+                    spl_1m=ac_result["sound_pressure_level"],
+                    frequency=ac_result["whistle_frequency"],
+                ))
+        result = sim.simulate_volley(arrows=preset_arrows)
         result["pattern"] = pattern
+        audio = sim.get_audio_synthesis_params(volley_result=result, listener_position=(0, 0, 1.5))
+        result["audio_synthesis"] = audio.calculate(binaural=True, source_position=(10, 0, 1.5))
         return result
     except Exception as e:
         logger.error(f"Error in volley preset: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
+
+def _build_launch_audio(velocity, rotation_speed, shape_profile, distance, source_position=(10, 0, 1.5),
+                       observer_heading_deg=0.0, duration_sec=2.5):
+    acoustics_sim_local = AeroAcousticsSimulator()
+    ac = acoustics_sim_local.simulate(velocity, rotation_speed, distance)
+    waveform = "sawtooth"
+    from .volley_simulation import _WAVETABLE_HARMONIC_RATIOS, _WAVETABLE_HARMONIC_GAINS, _SHAPE_TIMBRE
+    vib_hz = 5.0 + 0.02 * max(20, min(300, 0.8 * velocity + 40))
+    vib_depth = min(1.2, 0.15 + 0.004 * max(20, min(300, 0.8 * velocity + 40)))
+    attack = 0.008
+    decay = 0.22
+    sustain = -12
+    release = 0.35
+    max_spl = 105.0
+    vol_raw = 10 ** ((ac["sound_pressure_level"] - max_spl) / 20)
+    vol = max(0.0, min(1.0, vol_raw * 1.5))
+    asp = AudioSynthesisParams(
+        waveform_type=waveform,
+        dominant_frequency=ac["whistle_frequency"],
+        harmonic_ratios=list(_WAVETABLE_HARMONIC_RATIOS),
+        harmonic_gains=list(_WAVETABLE_HARMONIC_GAINS),
+        attack_sec=attack,
+        decay_sec=decay,
+        sustain_db=sustain,
+        release_sec=release,
+        vibrato_hz=vib_hz,
+        vibrato_depth_semitones=vib_depth,
+        total_duration_sec=duration_sec,
+        volume=vol,
+        timbre_description=_SHAPE_TIMBRE.get(shape_profile, "generic whistle"),
+        spl_reference_db=round(ac["sound_pressure_level"], 1),
+    )
+    return asp.calculate(
+        binaural=True,
+        source_position=source_position,
+        observer_heading_deg=observer_heading_deg,
+    )
 
 
 @app.get("/api/launch/audio-params")
@@ -564,42 +679,46 @@ async def get_launch_audio_params(
     launch_angle: float = Query(0.3),
     rotation_speed: float = Query(100.0),
     shape_profile: str = Query("conical"),
-    observer_distance: float = Query(10.0)
+    observer_distance: float = Query(10.0),
+    observer_heading_deg: float = Query(0.0, description="观测者朝向角度(°)，0为朝前方")
 ):
     try:
-        result = audio_params.calculate(
-            velocity=velocity,
-            rotation_speed=rotation_speed,
-            shape_profile=shape_profile,
-            distance=observer_distance,
-        )
         trajectory = aero_sim.calculate_trajectory(velocity, launch_angle, rotation_speed)
 
         peak_altitude = max((p["altitude"] for p in trajectory), default=0)
         final_range = trajectory[-1]["x"] if trajectory else 0
         flight_time = trajectory[-1]["time"] if trajectory else 0
 
-        result["trajectory"] = {
+        source_position = (observer_distance * math.cos(math.radians(-observer_heading_deg)),
+                           observer_distance * math.sin(math.radians(-observer_heading_deg)),
+                           peak_altitude * 0.3 + 1.5)
+
+        audio = _build_launch_audio(
+            velocity=velocity,
+            rotation_speed=rotation_speed,
+            shape_profile=shape_profile,
+            distance=observer_distance,
+            source_position=source_position,
+            observer_heading_deg=observer_heading_deg,
+        )
+
+        audio["trajectory"] = {
             "peak_altitude": round(peak_altitude, 1),
             "estimated_range": round(final_range, 1),
             "flight_time": round(flight_time, 2),
             "point_count": len(trajectory),
         }
-        return result
+        return audio
     except Exception as e:
         logger.error(f"Error in launch audio params: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/api/launch/experience")
 async def launch_experience(req: LaunchExperienceRequest):
     try:
-        audio = audio_params.calculate(
-            velocity=req.velocity,
-            rotation_speed=req.rotation_speed,
-            shape_profile=req.shape_profile,
-            distance=req.observer_distance,
-        )
         trajectory = aero_sim.calculate_trajectory(req.velocity, req.launch_angle, req.rotation_speed)
 
         peak_altitude = max((p["altitude"] for p in trajectory), default=0)
@@ -610,6 +729,19 @@ async def launch_experience(req: LaunchExperienceRequest):
             req.velocity, req.shape_profile, 0.0, req.rotation_speed
         )
         ac_result = acoustics_sim.simulate(req.velocity, req.rotation_speed, req.observer_distance)
+
+        obs_heading = getattr(req, "observer_heading_deg", 0.0) or 0.0
+        source_position = (req.observer_distance * math.cos(math.radians(-obs_heading)),
+                           req.observer_distance * math.sin(math.radians(-obs_heading)),
+                           peak_altitude * 0.3 + 1.5)
+        audio = _build_launch_audio(
+            velocity=req.velocity,
+            rotation_speed=req.rotation_speed,
+            shape_profile=req.shape_profile,
+            distance=req.observer_distance,
+            source_position=source_position,
+            observer_heading_deg=obs_heading,
+        )
 
         return {
             "audio": audio,
@@ -625,4 +757,6 @@ async def launch_experience(req: LaunchExperienceRequest):
         }
     except Exception as e:
         logger.error(f"Error in launch experience: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))

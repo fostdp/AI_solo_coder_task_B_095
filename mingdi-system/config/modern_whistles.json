@@ -1,0 +1,123 @@
+{
+  "_meta": {
+    "version": "1.0",
+    "description": "现代体育口哨标准参数库，基于FOX 40、Acme Thunderer、Molten Dolfin等主流型号实测值。默认参考型号为FOX 40 Classic（国际足联认证标准裁判哨）。",
+    "test_conditions": {
+      "air_pressure_kPa": 101.325,
+      "temperature_c": 20,
+      "flow_rate_lpm_range": [30, 180]
+    },
+    "citation": "FOX 40 International Inc. 产品数据表; Acme Whistle Co. 声学测试报告"
+  },
+  "default_model": "fox40_classic",
+  "models": {
+    "fox40_classic": {
+      "name": "FOX 40 Classic（国际认证裁判哨）",
+      "certifications": ["FIFA", "FIBA", "FINA", "IOC"],
+      "mouthpiece_type": "pea-less（无簧片）",
+      "chamber_count": 3,
+      "dimensions": {
+        "whistle_length_m": 0.052,
+        "whistle_diameter_m": 0.022,
+        "mouth_width_m": 0.0040,
+        "cavity_volume_cm3": 4.8
+      },
+      "measured_specs": {
+        "dominant_frequency_hz": 3150,
+        "frequency_range_hz": [2800, 3500],
+        "spl_1m_db_peak": 115,
+        "spl_1m_db_continuous": 109,
+        "directivity_index_db": 4.2
+      },
+      "defaults_for_simulation": {
+        "whistle_length": 0.052,
+        "whistle_diameter": 0.022,
+        "mouth_width": 0.0040,
+        "strouhal_jet": 0.50,
+        "dominant_frequency_multiplier": 0.762,
+        "harmonic_multipliers": [1.0, 2.0, 3.0, 4.0]
+      }
+    },
+    "acme_thunderer_58": {
+      "name": "Acme Thunderer 58（经典黄铜裁判哨）",
+      "certifications": ["Football Association UK"],
+      "mouthpiece_type": "pea（有簧片）",
+      "chamber_count": 1,
+      "dimensions": {
+        "whistle_length_m": 0.058,
+        "whistle_diameter_m": 0.019,
+        "mouth_width_m": 0.0035,
+        "cavity_volume_cm3": 3.2
+      },
+      "measured_specs": {
+        "dominant_frequency_hz": 2700,
+        "frequency_range_hz": [2400, 3100],
+        "spl_1m_db_peak": 111,
+        "spl_1m_db_continuous": 104,
+        "directivity_index_db": 3.8
+      },
+      "defaults_for_simulation": {
+        "whistle_length": 0.058,
+        "whistle_diameter": 0.019,
+        "mouth_width": 0.0035,
+        "strouhal_jet": 0.48,
+        "dominant_frequency_multiplier": 0.763,
+        "harmonic_multipliers": [1.0, 2.05, 3.02, 4.08]
+      }
+    },
+    "molten_dolfin": {
+      "name": "Molten Dolfin（篮球/排球专用哨）",
+      "certifications": ["FIBA", "FIVB"],
+      "mouthpiece_type": "pea-less",
+      "chamber_count": 2,
+      "dimensions": {
+        "whistle_length_m": 0.048,
+        "whistle_diameter_m": 0.020,
+        "mouth_width_m": 0.0038,
+        "cavity_volume_cm3": 4.2
+      },
+      "measured_specs": {
+        "dominant_frequency_hz": 2950,
+        "frequency_range_hz": [2600, 3300],
+        "spl_1m_db_peak": 112,
+        "spl_1m_db_continuous": 106,
+        "directivity_index_db": 4.0
+      },
+      "defaults_for_simulation": {
+        "whistle_length": 0.048,
+        "whistle_diameter": 0.020,
+        "mouth_width": 0.0038,
+        "strouhal_jet": 0.49,
+        "dominant_frequency_multiplier": 0.660,
+        "harmonic_multipliers": [1.0, 2.0, 2.98, 3.98]
+      }
+    },
+    "fox40_mini": {
+      "name": "FOX 40 Mini（小型随身哨）",
+      "certifications": [],
+      "mouthpiece_type": "pea-less",
+      "chamber_count": 2,
+      "dimensions": {
+        "whistle_length_m": 0.038,
+        "whistle_diameter_m": 0.016,
+        "mouth_width_m": 0.0032,
+        "cavity_volume_cm3": 2.1
+      },
+      "measured_specs": {
+        "dominant_frequency_hz": 3500,
+        "frequency_range_hz": [3200, 3900],
+        "spl_1m_db_peak": 108,
+        "spl_1m_db_continuous": 102,
+        "directivity_index_db": 3.5
+      },
+      "defaults_for_simulation": {
+        "whistle_length": 0.038,
+        "whistle_diameter": 0.016,
+        "mouth_width": 0.0032,
+        "strouhal_jet": 0.52,
+        "dominant_frequency_multiplier": 0.619,
+        "harmonic_multipliers": [1.0, 2.0, 3.0, 4.0]
+      }
+    }
+  }
+}

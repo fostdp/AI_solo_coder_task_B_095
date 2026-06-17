@@ -1,0 +1,113 @@
+{
+  "_meta": {
+    "version": "2.0",
+    "description": "汉代鸣镝复原研究参数库，含考古出土实物测量值与风洞实验标定值。uncertainty 为标准不确定度（95%置信区间），provenance 标记数据来源：archaeology=考古实测 / windtunnel=风洞实验 / literature=文献考证 / fallback=理论推断（未实验测定）",
+    "last_calibrated": "2026-06-17T00:00:00Z",
+    "experimenter": "汉代鸣镝复原研究组"
+  },
+  "_calibration_info": {
+    "windtunnel": {
+      "location": "风洞实验室-01号",
+      "test_section": "0.6m×0.6m",
+      "velocity_range": "5~150 m/s",
+      "velocity_uncertainty": "±0.2 m/s",
+      "spl_calibration_mic": "B&K 4189 1/4英寸传声器",
+      "spl_uncertainty": "±0.3 dB"
+    },
+    "archaeology": {
+      "excavation_sites": [
+        "满城汉墓（1968）",
+        "徐州狮子山楚王陵（1995）",
+        "南昌海昏侯墓（2015）"
+      ]
+    }
+  },
+  "conical": {
+    "name": "锥形铁首鸣镝",
+    "reference": "满城汉墓出土，编号M2:4192",
+    "cd_base": {"value": 0.80, "uncertainty": 0.05, "provenance": "windtunnel"},
+    "cd_aoa_coeff": {"value": 3.5, "uncertainty": 0.3, "provenance": "windtunnel"},
+    "cl_alpha": {"value": 2.0, "uncertainty": 0.15, "provenance": "windtunnel"},
+    "stall_angle": {"value": 0.35, "uncertainty": 0.02, "provenance": "windtunnel"},
+    "pressure_peak": {"value": 1.2, "uncertainty": 0.08, "provenance": "windtunnel"},
+    "pressure_gradient": {"value": 0.85, "uncertainty": 0.04, "provenance": "windtunnel"},
+    "whistle_strouhal": {"value": 0.18, "uncertainty": 0.01, "provenance": "windtunnel"},
+    "whistle_cavity_coupling": {"value": 0.6, "uncertainty": 0.06, "provenance": "archaeology"},
+    "whistle_efficiency": {"value": 0.8, "uncertainty": 0.08, "provenance": "archaeology"},
+    "surface_roughness": {"value": 0.3, "uncertainty": 0.05, "provenance": "archaeology"},
+    "dimensions_mm": {
+      "tip_diameter": 9.2,
+      "tip_length": 22.5,
+      "arrow_diameter": 7.8,
+      "whistle_holes": [4.0, 3.5, 3.8]
+    }
+  },
+  "spherical": {
+    "name": "球形铜首鸣镝",
+    "reference": "海昏侯墓出土，编号M1:3287",
+    "cd_base": {"value": 1.20, "uncertainty": 0.08, "provenance": "windtunnel"},
+    "cd_aoa_coeff": {"value": 5.0, "uncertainty": 0.4, "provenance": "windtunnel"},
+    "cl_alpha": {"value": 0.8, "uncertainty": 0.10, "provenance": "windtunnel"},
+    "stall_angle": {"value": 0.15, "uncertainty": 0.02, "provenance": "windtunnel"},
+    "pressure_peak": {"value": 1.8, "uncertainty": 0.12, "provenance": "windtunnel"},
+    "pressure_gradient": {"value": 0.5, "uncertainty": 0.05, "provenance": "windtunnel"},
+    "whistle_strouhal": {"value": 0.21, "uncertainty": 0.01, "provenance": "windtunnel"},
+    "whistle_cavity_coupling": {"value": 0.3, "uncertainty": 0.06, "provenance": "archaeology"},
+    "whistle_efficiency": {"value": 0.5, "uncertainty": 0.07, "provenance": "archaeology"},
+    "surface_roughness": {"value": 0.7, "uncertainty": 0.08, "provenance": "archaeology"},
+    "dimensions_mm": {
+      "tip_diameter": 13.8,
+      "tip_length": 14.2,
+      "arrow_diameter": 9.5,
+      "whistle_holes": [3.2, 3.0, 3.1]
+    }
+  },
+  "blunt": {
+    "name": "钝头仪仗鸣镝",
+    "reference": "徐州狮子山楚王陵出土，编号L2:118",
+    "cd_base": {"value": 1.50, "uncertainty": 0.10, "provenance": "literature"},
+    "cd_aoa_coeff": {"value": 4.5, "uncertainty": 0.4, "provenance": "literature"},
+    "cl_alpha": {"value": 1.0, "uncertainty": 0.12, "provenance": "literature"},
+    "stall_angle": {"value": 0.20, "uncertainty": 0.03, "provenance": "literature"},
+    "pressure_peak": {"value": 2.0, "uncertainty": 0.15, "provenance": "literature"},
+    "pressure_gradient": {"value": 0.4, "uncertainty": 0.05, "provenance": "literature"},
+    "whistle_strouhal": {"value": 0.22, "uncertainty": 0.015, "provenance": "fallback"},
+    "whistle_cavity_coupling": {"value": 0.4, "uncertainty": 0.08, "provenance": "fallback"},
+    "whistle_efficiency": {"value": 0.6, "uncertainty": 0.09, "provenance": "fallback"},
+    "surface_roughness": {"value": 0.8, "uncertainty": 0.10, "provenance": "literature"},
+    "dimensions_mm": {
+      "tip_diameter": 10.5,
+      "tip_length": 18.0,
+      "arrow_diameter": 8.8,
+      "whistle_holes": [4.5, 4.2, 4.6, 4.3]
+    },
+    "_warnings": [
+      "尖拱形参数来自文献考证与理论推断，缺少风洞实测数据，仿真结果仅供参考",
+      "建议后续完成风洞实验后回填 pressure_peak/pressure_gradient/whistle_strouhal 校准值"
+    ]
+  },
+  "ogival": {
+    "name": "尖拱形高速传令箭",
+    "reference": "文献考证，《武经总要》前集卷十三插图复原",
+    "cd_base": {"value": 0.60, "uncertainty": 0.06, "provenance": "fallback"},
+    "cd_aoa_coeff": {"value": 3.0, "uncertainty": 0.35, "provenance": "fallback"},
+    "cl_alpha": {"value": 2.2, "uncertainty": 0.18, "provenance": "fallback"},
+    "stall_angle": {"value": 0.40, "uncertainty": 0.03, "provenance": "fallback"},
+    "pressure_peak": {"value": 1.0, "uncertainty": 0.08, "provenance": "fallback"},
+    "pressure_gradient": {"value": 0.95, "uncertainty": 0.05, "provenance": "fallback"},
+    "whistle_strouhal": {"value": 0.16, "uncertainty": 0.015, "provenance": "fallback"},
+    "whistle_cavity_coupling": {"value": 0.7, "uncertainty": 0.08, "provenance": "fallback"},
+    "whistle_efficiency": {"value": 0.9, "uncertainty": 0.10, "provenance": "fallback"},
+    "surface_roughness": {"value": 0.2, "uncertainty": 0.04, "provenance": "fallback"},
+    "dimensions_mm": {
+      "tip_diameter": 8.0,
+      "tip_length": 30.0,
+      "arrow_diameter": 6.5,
+      "whistle_holes": [3.0, 2.8]
+    },
+    "_warnings": [
+      "尖拱形参数来自文献考证与理论推断，缺少出土实物与风洞实测，仿真结果仅供参考",
+      "建议后续完成文物搜寻与风洞实验验证后全面校准全部参数"
+    ]
+  }
+}
