@@ -116,11 +116,11 @@ function setupShapeComparisonUI() {
         const vel = parseFloat(document.getElementById('shape-vel').value);
         const aoa = parseFloat(document.getElementById('shape-aoa').value);
         const rot = parseFloat(document.getElementById('shape-rot').value);
-        COMPARISON_PANEL.fetchShapeComparison(vel, ["conical", "spherical", "blunt", "ogival"], aoa, rot)
+        SHAPE_COMPARATOR.compareShapes(vel, ["conical", "spherical", "blunt", "ogival"], aoa, rot, true)
             .then(data => {
                 if (data && data.comparison) {
-                    COMPARISON_PANEL.drawShapeComparisonChart('shape-comparison-chart', data.comparison);
-                    COMPARISON_PANEL.updateShapeComparisonDisplay(data);
+                    SHAPE_COMPARATOR.drawComparisonChart('shape-comparison-chart', data.comparison);
+                    SHAPE_COMPARATOR.updateComparisonDisplay(data);
                 }
             });
     });
@@ -146,11 +146,11 @@ function setupCrossEraUI() {
         const vel = parseFloat(document.getElementById('era-vel').value);
         const rot = parseFloat(document.getElementById('era-rot').value);
         const dist = parseFloat(document.getElementById('era-dist').value);
-        COMPARISON_PANEL.fetchCrossEraComparison(vel, rot, dist)
+        ERA_COMPARATOR.compareEras(vel, rot, dist, "fox40_classic", "conical")
             .then(data => {
                 if (data) {
-                    COMPARISON_PANEL.drawCrossEraChart('cross-era-chart', data);
-                    COMPARISON_PANEL.updateCrossEraDisplay(data);
+                    ERA_COMPARATOR.drawComparisonChart('cross-era-chart', data);
+                    ERA_COMPARATOR.updateComparisonDisplay(data);
                 }
             });
     });
@@ -184,11 +184,11 @@ function setupVolleyUI() {
         const count = parseInt(document.getElementById('volley-count').value);
         const vel = parseFloat(document.getElementById('volley-vel').value);
         const spacing = parseFloat(document.getElementById('volley-spacing').value);
-        VOLLEY_PANEL.fetchVolleyPreset(currentVolleyPattern, count, vel, 100, spacing)
+        FIELD_SUPERPOSER.presetField(currentVolleyPattern, count, vel, 100, spacing, "auto")
             .then(data => {
                 if (data) {
-                    VOLLEY_PANEL.drawVolleyField('volley-field-canvas', data);
-                    VOLLEY_PANEL.updateVolleyInfo(data);
+                    FIELD_SUPERPOSER.drawVolleyField('volley-field-canvas', data);
+                    FIELD_SUPERPOSER.updateVolleyInfo(data);
                 }
             });
     });
@@ -217,16 +217,16 @@ function setupLaunchUI() {
 
     const playBtn = document.getElementById('play-whistle-btn');
     if (playBtn) playBtn.addEventListener('click', () => {
-        if (LAUNCH_EXPERIENCE.isPlaying) {
-            LAUNCH_EXPERIENCE.stopWhistle();
+        if (VR_WHISTLING_ARROW.isPlaying()) {
+            VR_WHISTLING_ARROW.stopWhistle();
             return;
         }
         if (launchAudioData && launchAudioData.audio) {
-            LAUNCH_EXPERIENCE.playWhistleFromParams(launchAudioData.audio);
+            VR_WHISTLING_ARROW.playWhistleFromParams(launchAudioData.audio);
         } else {
             updateLaunchPreview(() => {
                 if (launchAudioData && launchAudioData.audio) {
-                    LAUNCH_EXPERIENCE.playWhistleFromParams(launchAudioData.audio);
+                    VR_WHISTLING_ARROW.playWhistleFromParams(launchAudioData.audio);
                 }
             });
         }
@@ -236,18 +236,18 @@ function setupLaunchUI() {
 }
 
 function updateLaunchPreview(callback) {
-    const angle = parseFloat(document.getElementById('launch-angle').value) * Math.PI / 180;
+    const angleDeg = parseFloat(document.getElementById('launch-angle').value);
     const vel = parseFloat(document.getElementById('launch-vel').value);
     const rot = parseFloat(document.getElementById('launch-rot').value);
     const shape = document.getElementById('launch-shape').value;
     const dist = parseFloat(document.getElementById('launch-dist').value);
 
-    LAUNCH_EXPERIENCE.fetchAudioParams(vel, angle, rot, shape, dist)
+    VR_WHISTLING_ARROW.launch(vel, angleDeg, rot, shape, dist, 0.0, 2.5)
         .then(data => {
             if (data) {
-                launchAudioData = { audio: data, trajectory_summary: data.trajectory || {}, acoustics: {} };
-                LAUNCH_EXPERIENCE.drawTrajectoryPreview('trajectory-canvas', data.trajectory || {}, angle);
-                LAUNCH_EXPERIENCE.updateLaunchDisplay(launchAudioData);
+                launchAudioData = { audio: data.audio, trajectory_summary: data.trajectory_summary || {}, acoustics: data.acoustics || {} };
+                VR_WHISTLING_ARROW.drawTrajectoryPreview('trajectory-canvas', data.trajectory_summary || {}, angleDeg);
+                VR_WHISTLING_ARROW.updateLaunchDisplay(launchAudioData);
             }
             if (callback) callback();
         })

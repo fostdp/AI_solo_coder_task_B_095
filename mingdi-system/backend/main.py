@@ -20,6 +20,8 @@ from .message_bus import MessageBus, CHANNELS
 from .physics import AeroDynamicsSimulator, AeroAcousticsSimulator, ShapeAwareAeroSimulator, CrossEraAcousticComparator, VolleySimulation, AudioSynthesisParams, SHAPE_PROFILES, BinauralSpatialAudio, get_shape_data_quality, VolleyArrowConfig
 from .config_loader import list_modern_whistle_models
 
+from .modules import ShapeComparator, EraComparator, FieldSuperposer, VRWhistlingArrow, CFDWorker, CFDJobStatus
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -34,6 +36,12 @@ message_bus: Optional[MessageBus] = None
 _latest_aggregated = {}
 _ws_clients: List[WebSocket] = []
 _ws_lock = threading.Lock()
+
+shape_comparator: Optional[ShapeComparator] = None
+era_comparator: Optional[EraComparator] = None
+field_superposer: Optional[FieldSuperposer] = None
+vr_whistling_arrow: Optional[VRWhistlingArrow] = None
+cfd_worker: Optional[CFDWorker] = None
 
 
 def _on_aggregated(message: dict):
@@ -76,6 +84,7 @@ def _start_bus_thread():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global influx_store, aero_sim, acoustics_sim, shape_aero_sim, cross_era_comparator, volley_sim, audio_params
+    global shape_comparator, era_comparator, field_superposer, vr_whistling_arrow, cfd_worker
 
     logger.info("Starting up MingDi API Gateway...")
 
@@ -87,10 +96,17 @@ async def lifespan(app: FastAPI):
     volley_sim = VolleySimulation()
     audio_params = None
 
+    shape_comparator = ShapeComparator()
+    era_comparator = EraComparator()
+    field_superposer = FieldSuperposer(backend="auto")
+    vr_whistling_arrow = VRWhistlingArrow()
+    cfd_worker = CFDWorker(pool_size=2)
+    cfd_worker.start()
+
     bus_thread = threading.Thread(target=_start_bus_thread, daemon=True)
     bus_thread.start()
 
-    logger.info("MingDi API Gateway started")
+    logger.info("MingDi API Gateway started: v1 (legacy) + v2 (modular) APIs active")
 
     yield
 
@@ -99,6 +115,8 @@ async def lifespan(app: FastAPI):
         message_bus.close()
     if influx_store:
         influx_store.close()
+    if cfd_worker:
+        cfd_worker.stop(wait=False)
     logger.info("MingDi API Gateway shutdown complete")
 
 
@@ -114,6 +132,7 @@ app.add_middleware(
 app.add_middleware(GZipMiddleware, minimum_size=500)
 
 _frontend_path = os.path.join(os.path.dirname(__file__), "..", "frontend")
+
 
 class PreCompressedStaticMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
@@ -141,6 +160,7 @@ class PreCompressedStaticMiddleware(BaseHTTPMiddleware):
                 return Response(content=open(gz_path, "rb").read(), headers=headers)
         return await call_next(request)
 
+
 app.add_middleware(PreCompressedStaticMiddleware)
 
 frontend_path = os.path.join(os.path.dirname(__file__), "..", "frontend")
@@ -148,25 +168,42 @@ if os.path.exists(frontend_path):
     app.mount("/static", StaticFiles(directory=frontend_path), name="static")
 
 
+# ============================================================
+# Root & Health
+# ============================================================
+
 @app.get("/")
 async def root():
     return {
         "name": settings.app_name,
         "version": settings.version,
-        "architecture": "microservices",
+        "architecture": "microservices + modular",
         "message_bus": "Redis Pub/Sub",
+        "modules": ["shape_comparator", "era_comparator", "field_superposer", "vr_whistling_arrow", "cfd_worker"],
+        "api_versions": {
+            "v1": "/api/* (legacy, backward-compatible)",
+            "v2": "/api/v2/* (new modular)"
+        },
         "status": "running"
     }
 
 
 @app.get("/api/health")
 async def health_check():
+    cfd_stats = cfd_worker.get_stats() if cfd_worker else None
     return {
         "status": "healthy",
         "gateway": True,
         "redis_connected": message_bus.client is not None if message_bus else False,
         "influx_connected": influx_store is not None,
-        "latest_arrow_count": len(_latest_aggregated)
+        "latest_arrow_count": len(_latest_aggregated),
+        "modules": {
+            "shape_comparator": shape_comparator is not None,
+            "era_comparator": era_comparator is not None,
+            "field_superposer": field_superposer is not None,
+            "vr_whistling_arrow": vr_whistling_arrow is not None,
+            "cfd_worker": cfd_stats,
+        }
     }
 
 
@@ -193,6 +230,10 @@ async def get_config():
         }
     }
 
+
+# ============================================================
+# Legacy v1 APIs (unchanged for backward compatibility)
+# ============================================================
 
 @app.post("/api/sensor/data")
 async def receive_sensor_data(data: SensorData):
@@ -411,6 +452,10 @@ async def get_flow_streamlines(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ============================================================
+# Legacy v1 APIs (feature endpoints, unchanged)
+# ============================================================
+
 @app.get("/api/shapes/profiles")
 async def get_shape_profiles():
     shape_quality = {s: get_shape_data_quality(s) for s in SHAPE_PROFILES}
@@ -552,7 +597,7 @@ async def volley_preset(
     backend: str = Query("numpy", description="加速后端: numpy / cupy / auto"),
 ):
     try:
-        from .volley_simulation import create_preset_volley
+        from .physics.volley_simulation import create_preset_volley
         sim = VolleySimulation(backend=backend)
         presets_known = ("marching_10", "ambush_20", "scouts_3", "single")
         if pattern in presets_known:
@@ -640,7 +685,7 @@ def _build_launch_audio(velocity, rotation_speed, shape_profile, distance, sourc
     acoustics_sim_local = AeroAcousticsSimulator()
     ac = acoustics_sim_local.simulate(velocity, rotation_speed, distance)
     waveform = "sawtooth"
-    from .volley_simulation import _WAVETABLE_HARMONIC_RATIOS, _WAVETABLE_HARMONIC_GAINS, _SHAPE_TIMBRE
+    from .physics.volley_simulation import _WAVETABLE_HARMONIC_RATIOS, _WAVETABLE_HARMONIC_GAINS, _SHAPE_TIMBRE
     vib_hz = 5.0 + 0.02 * max(20, min(300, 0.8 * velocity + 40))
     vib_depth = min(1.2, 0.15 + 0.004 * max(20, min(300, 0.8 * velocity + 40)))
     attack = 0.008
@@ -759,4 +804,400 @@ async def launch_experience(req: LaunchExperienceRequest):
         logger.error(f"Error in launch experience: {e}")
         import traceback
         traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================
+# NEW v2 APIs (modular architecture)
+# ============================================================
+
+# ------------------------------
+# v2 Shape Comparison
+# ------------------------------
+
+@app.get("/api/v2/shapes/profiles")
+async def v2_get_shape_profiles():
+    """v2 API: 获取形状配置与数据质量（使用 ShapeComparator 模块）"""
+    try:
+        return shape_comparator.get_shape_profiles()
+    except Exception as e:
+        logger.error(f"[v2] Error in get_shape_profiles: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/v2/shapes/compare")
+async def v2_compare_shapes(
+    velocity: float = Query(..., gt=0),
+    shapes: str = Query("conical,spherical,blunt,ogival"),
+    angle_of_attack: float = Query(0.0),
+    rotation_speed: float = Query(0.0),
+    include_ranking: bool = Query(True),
+):
+    """v2 API: 多形状气动对比（使用 ShapeComparator 模块，含自动排序）"""
+    try:
+        shape_list = [s.strip() for s in shapes.split(",") if s.strip()]
+        result = shape_comparator.compare(
+            velocity=velocity,
+            shapes=shape_list,
+            angle_of_attack=angle_of_attack,
+            rotation_speed=rotation_speed,
+            include_data_quality=True,
+        )
+        return result.to_dict()
+    except Exception as e:
+        logger.error(f"[v2] Error in shape comparison: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/v2/shapes/quality/{shape_name}")
+async def v2_get_shape_quality(shape_name: str):
+    """v2 API: 获取单个形状的数据质量评估"""
+    try:
+        return shape_comparator.get_shape_data_quality(shape_name)
+    except Exception as e:
+        logger.error(f"[v2] Error in shape quality: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ------------------------------
+# v2 Cross-Era Comparison
+# ------------------------------
+
+@app.get("/api/v2/era/models")
+async def v2_get_era_models():
+    """v2 API: 获取可用现代口哨型号列表"""
+    try:
+        return era_comparator.list_available_models()
+    except Exception as e:
+        logger.error(f"[v2] Error in era models: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/v2/era/compare")
+async def v2_compare_eras(
+    velocity: float = Query(..., gt=0),
+    rotation_speed: float = Query(100.0),
+    distance: float = Query(1.0),
+    modern_model: str = Query("fox40_classic"),
+    modern_whistle_length: float = Query(None),
+    modern_whistle_diameter: float = Query(None),
+    mingdi_shape: str = Query("conical"),
+):
+    """v2 API: 跨时代声学对比（使用 EraComparator 模块）"""
+    try:
+        result = era_comparator.compare(
+            velocity=velocity,
+            rotation_speed=rotation_speed,
+            distance=distance,
+            modern_model=modern_model,
+            modern_whistle_length=modern_whistle_length,
+            modern_whistle_diameter=modern_whistle_diameter,
+            mingdi_shape=mingdi_shape,
+        )
+        return result.to_dict()
+    except Exception as e:
+        logger.error(f"[v2] Error in era comparison: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ------------------------------
+# v2 Field Superposition
+# ------------------------------
+
+@app.get("/api/v2/field/patterns")
+async def v2_get_field_patterns():
+    """v2 API: 获取可用齐射阵型列表"""
+    try:
+        return {
+            "patterns": field_superposer.get_available_patterns(),
+            "backend_info": field_superposer.get_backend_info(),
+        }
+    except Exception as e:
+        logger.error(f"[v2] Error in field patterns: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v2/field/superpose")
+async def v2_superpose_field(req: VolleySimulationRequest):
+    """v2 API: 声场叠加仿真（使用 FieldSuperposer 模块）"""
+    try:
+        backend = getattr(req, "backend", "numpy") or "numpy"
+        superposer = FieldSuperposer(backend=backend)
+
+        new_arrows = []
+        for a in req.arrows:
+            pos = list(a.position) if a.position else [0, 0]
+            if len(pos) < 2:
+                pos = pos + [0] * (2 - len(pos))
+            x, y = float(pos[0]), float(pos[1])
+            z = 1.6
+            if len(pos) >= 3:
+                z = float(pos[2])
+            aid = a.arrow_id if hasattr(a, "arrow_id") else f"v-{id(a)}"
+            try:
+                id_int = int(str(aid).split("-")[-1]) if hasattr(a, "arrow_id") else len(new_arrows) + 1
+            except Exception:
+                id_int = len(new_arrows) + 1
+            new_arrows.append(VolleyArrowConfig(
+                id=id_int,
+                x=x, y=y, z=z,
+                velocity=a.velocity,
+                rotation_speed=a.rotation_speed,
+                shape_profile=getattr(a, "shape_profile", "conical") or "conical",
+                spl_1m=a.sound_pressure_level,
+                frequency=a.whistle_frequency,
+            ))
+
+        gs = int(req.grid_size)
+        extent = float(req.grid_spacing) * float(gs)
+        obs = list(req.observer_position) if req.observer_position else [0.0, 0.0, 1.5]
+        while len(obs) < 3:
+            obs.append(1.5 if len(obs) == 2 else 0.0)
+
+        result = superposer.superpose(
+            arrows=new_arrows,
+            grid_size=gs,
+            grid_extent=extent,
+            observer_height=float(obs[2]),
+            interference_threshold_db=3.0,
+            listener_position=(float(obs[0]), float(obs[1]), float(obs[2])),
+            listener_heading_deg=0.0,
+            duration_sec=2.5,
+            binaural=True,
+        )
+        return result.to_dict()
+    except Exception as e:
+        logger.error(f"[v2] Error in field superposition: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/v2/field/preset")
+async def v2_field_preset(
+    pattern: str = Query("line"),
+    count: int = Query(5, ge=1, le=20),
+    velocity: float = Query(65.0, gt=0),
+    rotation_speed: float = Query(100.0),
+    spacing: float = Query(5.0, gt=0),
+    backend: str = Query("auto"),
+):
+    """v2 API: 预设阵型声场叠加（使用 FieldSuperposer 模块）"""
+    try:
+        superposer = FieldSuperposer(backend=backend)
+        preset_arrows = superposer.create_preset_arrows(
+            pattern=pattern,
+            count=count,
+            velocity=velocity,
+            rotation_speed=rotation_speed,
+            spacing=spacing,
+        )
+
+        result = superposer.superpose(
+            arrows=preset_arrows,
+            listener_position=(0, 0, 1.5),
+        )
+        result_dict = result.to_dict()
+        result_dict["pattern"] = pattern
+        return result_dict
+    except Exception as e:
+        logger.error(f"[v2] Error in field preset: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ------------------------------
+# v2 VR Whistling Arrow
+# ------------------------------
+
+@app.get("/api/v2/vr/shapes")
+async def v2_get_vr_shapes():
+    """v2 API: 获取虚拟发射可用形状与音色"""
+    try:
+        return {
+            "shapes": vr_whistling_arrow.get_available_shapes(),
+            "timbres": vr_whistling_arrow.get_shape_timbres(),
+        }
+    except Exception as e:
+        logger.error(f"[v2] Error in vr shapes: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/v2/vr/launch")
+async def v2_vr_launch(
+    velocity: float = Query(65.0, gt=0),
+    launch_angle_deg: float = Query(25.0, ge=5, le=80),
+    rotation_speed: float = Query(100.0),
+    shape_profile: str = Query("conical"),
+    observer_distance: float = Query(30.0),
+    observer_heading_deg: float = Query(0.0),
+    duration_sec: float = Query(2.5),
+):
+    """v2 API: 虚拟发射体验（使用 VRWhistlingArrow 模块，角度以度为单位）"""
+    try:
+        launch_angle_rad = math.radians(launch_angle_deg)
+        result = vr_whistling_arrow.launch(
+            velocity=velocity,
+            launch_angle=launch_angle_rad,
+            rotation_speed=rotation_speed,
+            shape_profile=shape_profile,
+            observer_distance=observer_distance,
+            observer_heading_deg=observer_heading_deg,
+            duration_sec=duration_sec,
+        )
+        return result.to_dict()
+    except Exception as e:
+        logger.error(f"[v2] Error in vr launch: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v2/vr/launch")
+async def v2_vr_launch_post(req: LaunchExperienceRequest):
+    """v2 API: 虚拟发射体验（POST 版本）"""
+    try:
+        result = vr_whistling_arrow.launch(
+            velocity=req.velocity,
+            launch_angle=req.launch_angle,
+            rotation_speed=req.rotation_speed,
+            shape_profile=req.shape_profile,
+            observer_distance=req.observer_distance,
+            observer_heading_deg=getattr(req, "observer_heading_deg", 0.0) or 0.0,
+        )
+        return result.to_dict()
+    except Exception as e:
+        logger.error(f"[v2] Error in vr launch post: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/v2/vr/trajectory")
+async def v2_vr_estimate_trajectory(
+    velocity: float = Query(65.0, gt=0),
+    launch_angle_deg: float = Query(25.0),
+    rotation_speed: float = Query(0.0),
+):
+    """v2 API: 快速估算弹道参数"""
+    try:
+        launch_angle_rad = math.radians(launch_angle_deg)
+        return vr_whistling_arrow.estimate_trajectory(
+            velocity=velocity,
+            launch_angle=launch_angle_rad,
+            rotation_speed=rotation_speed,
+        )
+    except Exception as e:
+        logger.error(f"[v2] Error in trajectory estimate: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ------------------------------
+# v2 CFD Worker (async)
+# ------------------------------
+
+@app.get("/api/v2/cfd/job-types")
+async def v2_cfd_job_types():
+    """v2 API: 获取可用 CFD 任务类型"""
+    try:
+        return {
+            "job_types": CFDWorker.VALID_JOB_TYPES,
+            "worker_stats": cfd_worker.get_stats(),
+        }
+    except Exception as e:
+        logger.error(f"[v2] Error in cfd job types: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v2/cfd/submit")
+async def v2_cfd_submit(
+    job_type: str = Query(..., description="CFD任务类型"),
+    velocity: float = Query(..., gt=0, description="来流速度 m/s"),
+    length_scale: float = Query(None, description="特征长度 m"),
+    turbulence_intensity: float = Query(0.05, description="湍流强度"),
+    priority: int = Query(5, ge=1, le=10, description="优先级1-10"),
+):
+    """v2 API: 提交异步 CFD 计算任务（独立 Worker 进程执行）"""
+    try:
+        params = {
+            "velocity": velocity,
+            "turbulence_intensity": turbulence_intensity,
+        }
+        if length_scale:
+            params["length_scale"] = length_scale
+
+        job_id = cfd_worker.submit_job(
+            job_type=job_type,
+            params=params,
+            priority=priority,
+        )
+        return {
+            "job_id": job_id,
+            "status": CFDJobStatus.QUEUED.value,
+            "job_type": job_type,
+            "params": params,
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"[v2] Error in cfd submit: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/v2/cfd/job/{job_id}")
+async def v2_cfd_get_job(job_id: str, wait: float = Query(0.0, ge=0, le=10)):
+    """v2 API: 查询 CFD 任务状态与结果"""
+    try:
+        job = cfd_worker.get_job_result(job_id, timeout=wait)
+        if not job:
+            raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+        return job.to_dict()
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[v2] Error in cfd get job: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/v2/cfd/jobs")
+async def v2_cfd_list_jobs(status: str = Query(None, description="按状态过滤")):
+    """v2 API: 列出所有 CFD 任务"""
+    try:
+        status_filter = None
+        if status:
+            try:
+                status_filter = CFDJobStatus(status.lower())
+            except ValueError:
+                raise HTTPException(status_code=400, detail=f"Invalid status: {status}")
+        jobs = cfd_worker.list_jobs(status_filter=status_filter)
+        return {
+            "count": len(jobs),
+            "jobs": [j.to_dict() for j in jobs],
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[v2] Error in cfd list jobs: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/api/v2/cfd/job/{job_id}")
+async def v2_cfd_cancel_job(job_id: str):
+    """v2 API: 取消排队中的 CFD 任务"""
+    try:
+        success = cfd_worker.cancel_job(job_id)
+        if not success:
+            raise HTTPException(status_code=400, detail=f"Cannot cancel job {job_id} (not found or already running/completed)")
+        return {"job_id": job_id, "cancelled": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[v2] Error in cfd cancel job: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/v2/cfd/stats")
+async def v2_cfd_stats():
+    """v2 API: 获取 CFD Worker 统计信息"""
+    try:
+        return cfd_worker.get_stats()
+    except Exception as e:
+        logger.error(f"[v2] Error in cfd stats: {e}")
         raise HTTPException(status_code=500, detail=str(e))
