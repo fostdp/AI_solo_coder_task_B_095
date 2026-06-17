@@ -74,10 +74,46 @@
             50% { opacity: 0.5; }
         }
 
+        .nav-tabs {
+            display: flex;
+            background: #0f1524;
+            border-bottom: 2px solid #2a3a5c;
+            padding: 0 16px;
+        }
+
+        .nav-tab {
+            padding: 10px 20px;
+            font-size: 13px;
+            color: #6b7c93;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+
+        .nav-tab:hover {
+            color: #e0e6ed;
+            background: #1a2338;
+        }
+
+        .nav-tab.active {
+            color: #ffd700;
+            border-bottom-color: #ffd700;
+        }
+
+        .tab-content {
+            display: none;
+            height: calc(100vh - 100px);
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
         .main-container {
             display: grid;
             grid-template-columns: 280px 1fr 320px;
-            height: calc(100vh - 60px);
+            height: 100%;
         }
 
         .sidebar-left, .sidebar-right {
@@ -230,6 +266,16 @@
             cursor: pointer;
         }
 
+        .control-group select {
+            width: 100%;
+            padding: 6px 8px;
+            background: #1a2338;
+            border: 1px solid #2a3a5c;
+            color: #e0e6ed;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+
         .control-row {
             display: flex;
             gap: 8px;
@@ -374,6 +420,150 @@
             color: #ffd700;
             font-weight: 600;
         }
+
+        .feature-layout {
+            display: grid;
+            grid-template-columns: 300px 1fr 300px;
+            height: 100%;
+            gap: 0;
+        }
+
+        .feature-sidebar {
+            background: #0f1524;
+            padding: 16px;
+            overflow-y: auto;
+            border-right: 1px solid #1a2338;
+        }
+
+        .feature-center {
+            background: #050810;
+            padding: 16px;
+            overflow-y: auto;
+            position: relative;
+        }
+
+        .feature-sidebar-right {
+            background: #0f1524;
+            padding: 16px;
+            overflow-y: auto;
+            border-left: 1px solid #1a2338;
+        }
+
+        .btn-primary {
+            padding: 10px 20px;
+            background: linear-gradient(135deg, #ffd700, #ff8c00);
+            color: #0a0e17;
+            border: none;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            width: 100%;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(255, 215, 0, 0.3);
+        }
+
+        .btn-primary.playing {
+            background: linear-gradient(135deg, #ff6b6b, #ff3333);
+        }
+
+        .btn-secondary {
+            padding: 8px 16px;
+            background: #1a2338;
+            color: #e0e6ed;
+            border: 1px solid #2a3a5c;
+            border-radius: 6px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-secondary:hover {
+            border-color: #ffd700;
+            background: #2a3a5c;
+        }
+
+        .btn-secondary.active {
+            background: #ffd700;
+            color: #0a0e17;
+            border-color: #ffd700;
+        }
+
+        .canvas-container {
+            width: 100%;
+            height: 350px;
+            background: #0a0e17;
+            border: 1px solid #2a3a5c;
+            border-radius: 8px;
+            overflow: hidden;
+            margin-bottom: 12px;
+        }
+
+        .canvas-container canvas {
+            width: 100%;
+            height: 100%;
+        }
+
+        .trajectory-preview {
+            width: 100%;
+            height: 160px;
+            background: #0a0e17;
+            border: 1px solid #2a3a5c;
+            border-radius: 8px;
+            overflow: hidden;
+            margin-bottom: 12px;
+        }
+
+        .trajectory-preview canvas {
+            width: 100%;
+            height: 100%;
+        }
+
+        .chip-group {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+            margin-bottom: 12px;
+        }
+
+        .shape-chip {
+            padding: 5px 12px;
+            background: #1a2338;
+            border: 1px solid #2a3a5c;
+            border-radius: 14px;
+            font-size: 11px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .shape-chip.active {
+            background: #ffd700;
+            color: #0a0e17;
+            border-color: #ffd700;
+        }
+
+        .shape-chip:hover {
+            border-color: #ffd700;
+        }
+
+        .volley-field-container {
+            width: 100%;
+            height: 400px;
+            background: #0a0e17;
+            border: 1px solid #2a3a5c;
+            border-radius: 8px;
+            overflow: hidden;
+            margin-bottom: 12px;
+        }
+
+        .volley-field-container canvas {
+            width: 100%;
+            height: 100%;
+        }
     </style>
 </head>
 <body>
@@ -388,152 +578,399 @@
         </div>
     </div>
 
-    <div class="main-container">
-        <div class="sidebar-left">
-            <div class="panel">
-                <div class="panel-title">响箭选择</div>
-                <div class="arrow-selector" id="arrow-selector">
-                    <div class="arrow-chip active" data-arrow="MD-001">MD-001</div>
-                    <div class="arrow-chip" data-arrow="MD-002">MD-002</div>
-                    <div class="arrow-chip" data-arrow="MD-003">MD-003</div>
+    <div class="nav-tabs">
+        <div class="nav-tab active" data-tab="classic">实时监控</div>
+        <div class="nav-tab" data-tab="shape-comparison">形状对比</div>
+        <div class="nav-tab" data-tab="cross-era">跨时代对比</div>
+        <div class="nav-tab" data-tab="volley">齐射仿真</div>
+        <div class="nav-tab" data-tab="launch">虚拟发射</div>
+    </div>
+
+    <!-- Tab 1: Classic Dashboard (unchanged) -->
+    <div class="tab-content active" id="tab-classic">
+        <div class="main-container">
+            <div class="sidebar-left">
+                <div class="panel">
+                    <div class="panel-title">响箭选择</div>
+                    <div class="arrow-selector" id="arrow-selector">
+                        <div class="arrow-chip active" data-arrow="MD-001">MD-001</div>
+                        <div class="arrow-chip" data-arrow="MD-002">MD-002</div>
+                        <div class="arrow-chip" data-arrow="MD-003">MD-003</div>
+                    </div>
+                </div>
+
+                <div class="panel">
+                    <div class="panel-title">飞行参数</div>
+                    <div class="data-item">
+                        <span class="data-label">飞行速度</span>
+                        <span><span class="data-value highlight" id="velocity">0.00</span><span class="data-unit">m/s</span></span>
+                    </div>
+                    <div class="data-item">
+                        <span class="data-label">转速</span>
+                        <span><span class="data-value" id="rotation-speed">0.00</span><span class="data-unit">rad/s</span></span>
+                    </div>
+                    <div class="data-item">
+                        <span class="data-label">飞行高度</span>
+                        <span><span class="data-value" id="altitude">0.00</span><span class="data-unit">m</span></span>
+                    </div>
+                    <div class="data-item">
+                        <span class="data-label">俯仰角</span>
+                        <span><span class="data-value" id="pitch">0.00</span><span class="data-unit">rad</span></span>
+                    </div>
+                    <div class="data-item">
+                        <span class="data-label">预估射程</span>
+                        <span><span class="data-value" id="range">0.00</span><span class="data-unit">m</span></span>
+                    </div>
+                </div>
+
+                <div class="panel">
+                    <div class="panel-title">仿真控制</div>
+                    <div class="control-group">
+                        <div class="control-row">
+                            <label>初始速度</label>
+                            <span class="control-value" id="vel-control-val">65 m/s</span>
+                        </div>
+                        <input type="range" id="velocity-control" min="20" max="100" value="65" step="1">
+                    </div>
+                    <div class="control-group">
+                        <div class="control-row">
+                            <label>发射角度</label>
+                            <span class="control-value" id="angle-control-val">0.30 rad</span>
+                        </div>
+                        <input type="range" id="angle-control" min="0" max="1.0" value="0.3" step="0.05">
+                    </div>
+                    <div class="control-group">
+                        <div class="control-row">
+                            <label>初始转速</label>
+                            <span class="control-value" id="rot-control-val">100 rad/s</span>
+                        </div>
+                        <input type="range" id="rotation-control" min="0" max="300" value="100" step="10">
+                    </div>
                 </div>
             </div>
 
-            <div class="panel">
-                <div class="panel-title">飞行参数</div>
-                <div class="data-item">
-                    <span class="data-label">飞行速度</span>
-                    <span><span class="data-value highlight" id="velocity">0.00</span><span class="data-unit">m/s</span></span>
+            <div class="view-container">
+                <canvas id="three-canvas"></canvas>
+                <div class="sound-field-title">声场分布 (截面)</div>
+                <canvas id="sound-field-canvas"></canvas>
+
+                <div class="view-controls">
+                    <button class="view-btn active" data-view="3d">3D视图</button>
+                    <button class="view-btn" data-view="flow">气流流线</button>
+                    <button class="view-btn" data-view="acoustic">声场模式</button>
                 </div>
-                <div class="data-item">
-                    <span class="data-label">转速</span>
-                    <span><span class="data-value" id="rotation-speed">0.00</span><span class="data-unit">rad/s</span></span>
-                </div>
-                <div class="data-item">
-                    <span class="data-label">飞行高度</span>
-                    <span><span class="data-value" id="altitude">0.00</span><span class="data-unit">m</span></span>
-                </div>
-                <div class="data-item">
-                    <span class="data-label">俯仰角</span>
-                    <span><span class="data-value" id="pitch">0.00</span><span class="data-unit">rad</span></span>
-                </div>
-                <div class="data-item">
-                    <span class="data-label">预估射程</span>
-                    <span><span class="data-value" id="range">0.00</span><span class="data-unit">m</span></span>
+
+                <div class="legend">
+                    <div class="legend-title">图例</div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background: #ffd700;"></div>
+                        <span>响箭主体</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background: #88ccff;"></div>
+                        <span>气流流线</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background: linear-gradient(90deg, #001133, #ff3300);"></div>
+                        <span>声压级梯度</span>
+                    </div>
                 </div>
             </div>
 
-            <div class="panel">
-                <div class="panel-title">仿真控制</div>
-                <div class="control-group">
-                    <div class="control-row">
-                        <label>初始速度</label>
-                        <span class="control-value" id="vel-control-val">65 m/s</span>
+            <div class="sidebar-right">
+                <div class="panel">
+                    <div class="panel-title">声学分析</div>
+                    <div class="data-item">
+                        <span class="data-label">哨音频率</span>
+                        <span><span class="data-value highlight" id="whistle-freq">0.0</span><span class="data-unit">Hz</span></span>
                     </div>
-                    <input type="range" id="velocity-control" min="20" max="100" value="65" step="1">
+                    <div class="data-item">
+                        <span class="data-label">声压级</span>
+                        <span><span class="data-value" id="spl">0.0</span><span class="data-unit">dB</span></span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="spl-bar" style="width: 0%"></div>
+                    </div>
+                    <div class="data-item">
+                        <span class="data-label">传播距离</span>
+                        <span><span class="data-value" id="prop-distance">0.0</span><span class="data-unit">m</span></span>
+                    </div>
+                    <div class="data-item">
+                        <span class="data-label">斯托劳哈尔数</span>
+                        <span><span class="data-value" id="strouhal">0.00</span></span>
+                    </div>
+                    <div class="data-item">
+                        <span class="data-label">雷诺数</span>
+                        <span><span class="data-value" id="reynolds">0</span></span>
+                    </div>
                 </div>
-                <div class="control-group">
-                    <div class="control-row">
-                        <label>发射角度</label>
-                        <span class="control-value" id="angle-control-val">0.30 rad</span>
+
+                <div class="panel">
+                    <div class="panel-title">空气动力学</div>
+                    <div class="data-item">
+                        <span class="data-label">阻力</span>
+                        <span><span class="data-value" id="drag-force">0.000</span><span class="data-unit">N</span></span>
                     </div>
-                    <input type="range" id="angle-control" min="0" max="1.0" value="0.3" step="0.05">
+                    <div class="data-item">
+                        <span class="data-label">升力</span>
+                        <span><span class="data-value" id="lift-force">0.000</span><span class="data-unit">N</span></span>
+                    </div>
+                    <div class="data-item">
+                        <span class="data-label">阻力系数</span>
+                        <span><span class="data-value" id="drag-coef">0.000</span></span>
+                    </div>
+                    <div class="data-item">
+                        <span class="data-label">升力系数</span>
+                        <span><span class="data-value" id="lift-coef">0.000</span></span>
+                    </div>
+                    <div class="data-item">
+                        <span class="data-label">力矩</span>
+                        <span><span class="data-value" id="moment">0.000</span><span class="data-unit">N·m</span></span>
+                    </div>
                 </div>
-                <div class="control-group">
-                    <div class="control-row">
-                        <label>初始转速</label>
-                        <span class="control-value" id="rot-control-val">100 rad/s</span>
+
+                <div class="panel">
+                    <div class="panel-title">告警记录</div>
+                    <div class="alerts-list" id="alerts-list">
+                        <div style="color: #4a5568; font-size: 12px; text-align: center; padding: 20px 0;">
+                            暂无告警
+                        </div>
                     </div>
-                    <input type="range" id="rotation-control" min="0" max="300" value="100" step="10">
                 </div>
             </div>
         </div>
+    </div>
 
-        <div class="view-container">
-            <canvas id="three-canvas"></canvas>
-            <div class="sound-field-title">声场分布 (截面)</div>
-            <canvas id="sound-field-canvas"></canvas>
-
-            <div class="view-controls">
-                <button class="view-btn active" data-view="3d">3D视图</button>
-                <button class="view-btn" data-view="flow">气流流线</button>
-                <button class="view-btn" data-view="acoustic">声场模式</button>
+    <!-- Tab 2: Shape Comparison -->
+    <div class="tab-content" id="tab-shape-comparison">
+        <div class="feature-layout">
+            <div class="feature-sidebar">
+                <div class="panel">
+                    <div class="panel-title">气动形状对比</div>
+                    <div class="control-group">
+                        <label>飞行速度 (m/s)</label>
+                        <input type="range" id="shape-vel" min="20" max="150" value="65" step="5">
+                        <span class="control-value" id="shape-vel-val">65 m/s</span>
+                    </div>
+                    <div class="control-group">
+                        <label>攻角 (rad)</label>
+                        <input type="range" id="shape-aoa" min="0" max="0.5" value="0.1" step="0.02">
+                        <span class="control-value" id="shape-aoa-val">0.10 rad</span>
+                    </div>
+                    <div class="control-group">
+                        <label>转速 (rad/s)</label>
+                        <input type="range" id="shape-rot" min="0" max="250" value="100" step="10">
+                        <span class="control-value" id="shape-rot-val">100 rad/s</span>
+                    </div>
+                    <button class="btn-primary" id="run-shape-comparison">运行对比仿真</button>
+                </div>
+                <div class="panel">
+                    <div class="panel-title">对比结果</div>
+                    <div id="shape-comparison-details" style="font-size:12px;color:#a0aec0">点击上方按钮运行对比</div>
+                </div>
             </div>
-
-            <div class="legend">
-                <div class="legend-title">图例</div>
-                <div class="legend-item">
-                    <div class="legend-color" style="background: #ffd700;"></div>
-                    <span>响箭主体</span>
+            <div class="feature-center">
+                <div class="canvas-container">
+                    <canvas id="shape-comparison-chart"></canvas>
                 </div>
-                <div class="legend-item">
-                    <div class="legend-color" style="background: #88ccff;"></div>
-                    <span>气流流线</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color" style="background: linear-gradient(90deg, #001133, #ff3300);"></div>
-                    <span>声压级梯度</span>
+            </div>
+            <div class="feature-sidebar-right">
+                <div class="panel">
+                    <div class="panel-title">形状说明</div>
+                    <div style="font-size:12px;color:#a0aec0;line-height:1.6">
+                        <div style="margin-bottom:8px"><span style="color:#00d4aa">● 锥形</span> — 流线型箭头，低阻高速，传统战斗型</div>
+                        <div style="margin-bottom:8px"><span style="color:#ffd700">● 球形</span> — 圆头铜首，高阻大哨音，信号传递型</div>
+                        <div style="margin-bottom:8px"><span style="color:#ff6b6b">● 钝头</span> — 平头设计，最大声学效率，仪仗型</div>
+                        <div><span style="color:#88ccff">● 尖拱形</span> — 超流线型，极低阻力，高速传令型</div>
+                    </div>
                 </div>
             </div>
         </div>
+    </div>
 
-        <div class="sidebar-right">
-            <div class="panel">
-                <div class="panel-title">声学分析</div>
-                <div class="data-item">
-                    <span class="data-label">哨音频率</span>
-                    <span><span class="data-value highlight" id="whistle-freq">0.0</span><span class="data-unit">Hz</span></span>
+    <!-- Tab 3: Cross-Era Comparison -->
+    <div class="tab-content" id="tab-cross-era">
+        <div class="feature-layout">
+            <div class="feature-sidebar">
+                <div class="panel">
+                    <div class="panel-title">跨时代声学对比</div>
+                    <div class="control-group">
+                        <label>飞行速度 (m/s)</label>
+                        <input type="range" id="era-vel" min="20" max="100" value="65" step="5">
+                        <span class="control-value" id="era-vel-val">65 m/s</span>
+                    </div>
+                    <div class="control-group">
+                        <label>转速 (rad/s)</label>
+                        <input type="range" id="era-rot" min="0" max="200" value="100" step="10">
+                        <span class="control-value" id="era-rot-val">100 rad/s</span>
+                    </div>
+                    <div class="control-group">
+                        <label>观测距离 (m)</label>
+                        <input type="range" id="era-dist" min="1" max="100" value="10" step="1">
+                        <span class="control-value" id="era-dist-val">10 m</span>
+                    </div>
+                    <button class="btn-primary" id="run-cross-era">运行跨时代对比</button>
                 </div>
-                <div class="data-item">
-                    <span class="data-label">声压级</span>
-                    <span><span class="data-value" id="spl">0.0</span><span class="data-unit">dB</span></span>
-                </div>
-                <div class="progress-bar">
-                    <div class="progress-fill" id="spl-bar" style="width: 0%"></div>
-                </div>
-                <div class="data-item">
-                    <span class="data-label">传播距离</span>
-                    <span><span class="data-value" id="prop-distance">0.0</span><span class="data-unit">m</span></span>
-                </div>
-                <div class="data-item">
-                    <span class="data-label">斯托劳哈尔数</span>
-                    <span><span class="data-value" id="strouhal">0.00</span></span>
-                </div>
-                <div class="data-item">
-                    <span class="data-label">雷诺数</span>
-                    <span><span class="data-value" id="reynolds">0</span></span>
+                <div class="panel">
+                    <div class="panel-title">详细数据</div>
+                    <div id="cross-era-details" style="font-size:12px;color:#a0aec0">点击上方按钮运行对比</div>
                 </div>
             </div>
-
-            <div class="panel">
-                <div class="panel-title">空气动力学</div>
-                <div class="data-item">
-                    <span class="data-label">阻力</span>
-                    <span><span class="data-value" id="drag-force">0.000</span><span class="data-unit">N</span></span>
-                </div>
-                <div class="data-item">
-                    <span class="data-label">升力</span>
-                    <span><span class="data-value" id="lift-force">0.000</span><span class="data-unit">N</span></span>
-                </div>
-                <div class="data-item">
-                    <span class="data-label">阻力系数</span>
-                    <span><span class="data-value" id="drag-coef">0.000</span></span>
-                </div>
-                <div class="data-item">
-                    <span class="data-label">升力系数</span>
-                    <span><span class="data-value" id="lift-coef">0.000</span></span>
-                </div>
-                <div class="data-item">
-                    <span class="data-label">力矩</span>
-                    <span><span class="data-value" id="moment">0.000</span><span class="data-unit">N·m</span></span>
+            <div class="feature-center">
+                <div class="canvas-container">
+                    <canvas id="cross-era-chart"></canvas>
                 </div>
             </div>
+            <div class="feature-sidebar-right">
+                <div class="panel">
+                    <div class="panel-title">对比原理</div>
+                    <div style="font-size:12px;color:#a0aec0;line-height:1.6">
+                        <div style="margin-bottom:12px"><span style="color:#ffd700;font-weight:600">古代鸣镝</span><br>发声机制：腔体共鸣 + 涡脱落<br>频率范围：800~3500 Hz<br>声源类型：Monopole + Dipole 混合</div>
+                        <div><span style="color:#00d4aa;font-weight:600">现代口哨</span><br>发声机制：射流-边棱音 + 腔体共振<br>频率范围：2000~4000 Hz<br>声源类型：Jet-Edge Tone + Cavity</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 
-            <div class="panel">
-                <div class="panel-title">告警记录</div>
-                <div class="alerts-list" id="alerts-list">
-                    <div style="color: #4a5568; font-size: 12px; text-align: center; padding: 20px 0;">
-                        暂无告警
+    <!-- Tab 4: Volley Simulation -->
+    <div class="tab-content" id="tab-volley">
+        <div class="feature-layout">
+            <div class="feature-sidebar">
+                <div class="panel">
+                    <div class="panel-title">齐射仿真</div>
+                    <div class="control-group">
+                        <label>阵型</label>
+                        <div class="chip-group">
+                            <button class="shape-chip active" data-pattern="line">横排</button>
+                            <button class="shape-chip" data-pattern="wedge">楔形</button>
+                            <button class="shape-chip" data-pattern="arc">弧形</button>
+                            <button class="shape-chip" data-pattern="random">散布</button>
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label>箭数</label>
+                        <input type="range" id="volley-count" min="2" max="15" value="5" step="1">
+                        <span class="control-value" id="volley-count-val">5</span>
+                    </div>
+                    <div class="control-group">
+                        <label>速度 (m/s)</label>
+                        <input type="range" id="volley-vel" min="30" max="100" value="65" step="5">
+                        <span class="control-value" id="volley-vel-val">65 m/s</span>
+                    </div>
+                    <div class="control-group">
+                        <label>间距 (m)</label>
+                        <input type="range" id="volley-spacing" min="2" max="15" value="5" step="0.5">
+                        <span class="control-value" id="volley-spacing-val">5 m</span>
+                    </div>
+                    <button class="btn-primary" id="run-volley">模拟齐射声场</button>
+                </div>
+                <div class="panel">
+                    <div class="panel-title">齐射信息</div>
+                    <div id="volley-info" style="font-size:12px;color:#a0aec0">点击上方按钮运行齐射仿真</div>
+                </div>
+            </div>
+            <div class="feature-center">
+                <div class="volley-field-container">
+                    <canvas id="volley-field-canvas"></canvas>
+                </div>
+            </div>
+            <div class="feature-sidebar-right">
+                <div class="panel">
+                    <div class="panel-title">声场叠加原理</div>
+                    <div style="font-size:12px;color:#a0aec0;line-height:1.6">
+                        <div style="margin-bottom:10px">多支响箭齐射时，各声源产生的声波在空间中叠加：</div>
+                        <div style="margin-bottom:8px"><span style="color:#00d4aa">建设性干涉</span><br>同相位声波叠加，声压级增强</div>
+                        <div style="margin-bottom:8px"><span style="color:#ff6b6b">破坏性干涉</span><br>反相位声波抵消，声压级降低</div>
+                        <div><span style="color:#ffd700">叠加增强</span><br>N支同功率声源：+10·log₁₀(N) dB</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tab 5: Launch Experience -->
+    <div class="tab-content" id="tab-launch">
+        <div class="feature-layout">
+            <div class="feature-sidebar">
+                <div class="panel">
+                    <div class="panel-title">虚拟发射体验</div>
+                    <div class="control-group">
+                        <label>发射角度 (°)</label>
+                        <input type="range" id="launch-angle" min="5" max="80" value="25" step="1">
+                        <span class="control-value" id="launch-angle-val">25°</span>
+                    </div>
+                    <div class="control-group">
+                        <label>初始速度 (m/s)</label>
+                        <input type="range" id="launch-vel" min="30" max="120" value="65" step="5">
+                        <span class="control-value" id="launch-vel-val">65 m/s</span>
+                    </div>
+                    <div class="control-group">
+                        <label>转速 (rad/s)</label>
+                        <input type="range" id="launch-rot" min="0" max="250" value="100" step="10">
+                        <span class="control-value" id="launch-rot-val">100 rad/s</span>
+                    </div>
+                    <div class="control-group">
+                        <label>箭头形状</label>
+                        <select id="launch-shape">
+                            <option value="conical">锥形（传统战斗型）</option>
+                            <option value="spherical">球形（信号传递型）</option>
+                            <option value="blunt">钝头（仪仗型）</option>
+                            <option value="ogival">尖拱形（高速传令型）</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label>观测距离 (m)</label>
+                        <input type="range" id="launch-dist" min="5" max="200" value="30" step="5">
+                        <span class="control-value" id="launch-dist-val">30 m</span>
+                    </div>
+                    <button class="btn-primary" id="play-whistle-btn">聆听哨音</button>
+                </div>
+                <div class="panel">
+                    <div class="panel-title">发射数据</div>
+                    <div class="data-item">
+                        <span class="data-label">哨音频率</span>
+                        <span><span class="data-value highlight" id="launch-freq">—</span><span class="data-unit">Hz</span></span>
+                    </div>
+                    <div class="data-item">
+                        <span class="data-label">声压级</span>
+                        <span><span class="data-value" id="launch-spl">—</span><span class="data-unit">dB</span></span>
+                    </div>
+                    <div class="data-item">
+                        <span class="data-label">音色</span>
+                        <span><span class="data-value" id="launch-timbre">—</span></span>
+                    </div>
+                    <div class="data-item">
+                        <span class="data-label">预估射程</span>
+                        <span><span class="data-value" id="launch-range">—</span><span class="data-unit">m</span></span>
+                    </div>
+                    <div class="data-item">
+                        <span class="data-label">峰值高度</span>
+                        <span><span class="data-value" id="launch-peak-alt">—</span><span class="data-unit">m</span></span>
+                    </div>
+                </div>
+            </div>
+            <div class="feature-center">
+                <div class="trajectory-preview">
+                    <canvas id="trajectory-canvas"></canvas>
+                </div>
+                <div class="canvas-container">
+                    <canvas id="launch-sound-field-canvas"></canvas>
+                </div>
+            </div>
+            <div class="feature-sidebar-right">
+                <div class="panel">
+                    <div class="panel-title">使用说明</div>
+                    <div style="font-size:12px;color:#a0aec0;line-height:1.6">
+                        <div style="margin-bottom:10px">1. 调节发射角度，体验不同弹道弧线</div>
+                        <div style="margin-bottom:10px">2. 选择箭头形状，观察音色变化</div>
+                        <div style="margin-bottom:10px">3. 点击"聆听哨音"，通过 Web Audio API 实时合成哨音</div>
+                        <div style="margin-bottom:10px">4. 调节观测距离，感受声音远近衰减</div>
+                        <div style="color:#ffd700;margin-top:12px">音色说明：</div>
+                        <div style="margin-top:4px"><span style="color:#00d4aa">锥形</span> → 清亮尖锐</div>
+                        <div><span style="color:#ffd700">球形</span> → 粗犷浑厚</div>
+                        <div><span style="color:#ff6b6b">钝头</span> → 低沉悠长</div>
+                        <div><span style="color:#88ccff">尖拱形</span> → 通透明亮</div>
                     </div>
                 </div>
             </div>
@@ -542,6 +979,9 @@
 
     <script src="js/whistling_arrow_3d.js"></script>
     <script src="js/acoustic_panel.js"></script>
+    <script src="js/comparison_panel.js"></script>
+    <script src="js/volley_panel.js"></script>
+    <script src="js/launch_experience.js"></script>
     <script src="js/app.js"></script>
 </body>
 </html>

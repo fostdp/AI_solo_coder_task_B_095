@@ -14,10 +14,10 @@ import math
 import os
 
 from .config import settings
-from .models import SensorData, FlightStatus
+from .models import SensorData, FlightStatus, ShapeComparisonRequest, VolleySimulationRequest, LaunchExperienceRequest
 from .influx_client import InfluxDBStore
 from .message_bus import MessageBus, CHANNELS
-from .physics import AeroDynamicsSimulator, AeroAcousticsSimulator
+from .physics import AeroDynamicsSimulator, AeroAcousticsSimulator, ShapeAwareAeroSimulator, CrossEraAcousticComparator, VolleySimulation, AudioSynthesisParams, SHAPE_PROFILES
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -25,6 +25,10 @@ logger = logging.getLogger(__name__)
 influx_store: Optional[InfluxDBStore] = None
 aero_sim: Optional[AeroDynamicsSimulator] = None
 acoustics_sim: Optional[AeroAcousticsSimulator] = None
+shape_aero_sim: Optional[ShapeAwareAeroSimulator] = None
+cross_era_comparator: Optional[CrossEraAcousticComparator] = None
+volley_sim: Optional[VolleySimulation] = None
+audio_params: Optional[AudioSynthesisParams] = None
 message_bus: Optional[MessageBus] = None
 _latest_aggregated = {}
 _ws_clients: List[WebSocket] = []
@@ -70,13 +74,17 @@ def _start_bus_thread():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global influx_store, aero_sim, acoustics_sim
+    global influx_store, aero_sim, acoustics_sim, shape_aero_sim, cross_era_comparator, volley_sim, audio_params
 
     logger.info("Starting up MingDi API Gateway...")
 
     influx_store = InfluxDBStore()
     aero_sim = AeroDynamicsSimulator()
     acoustics_sim = AeroAcousticsSimulator()
+    shape_aero_sim = ShapeAwareAeroSimulator()
+    cross_era_comparator = CrossEraAcousticComparator()
+    volley_sim = VolleySimulation()
+    audio_params = AudioSynthesisParams()
 
     bus_thread = threading.Thread(target=_start_bus_thread, daemon=True)
     bus_thread.start()
@@ -399,4 +407,222 @@ async def get_flow_streamlines(
         return {"streamlines": streamlines, "velocity": velocity}
     except Exception as e:
         logger.error(f"Error generating streamlines: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/shapes/profiles")
+async def get_shape_profiles():
+    return {"shapes": list(SHAPE_PROFILES.keys()), "profiles": SHAPE_PROFILES}
+
+
+@app.get("/api/shapes/compare")
+async def compare_shapes(
+    velocity: float = Query(..., gt=0),
+    shapes: str = Query("conical,spherical,blunt,ogival"),
+    angle_of_attack: float = Query(0.0),
+    rotation_speed: float = Query(0.0)
+):
+    try:
+        shape_list = [s.strip() for s in shapes.split(",") if s.strip()]
+        results = shape_aero_sim.compare_shapes(velocity, shape_list, angle_of_attack, rotation_speed)
+        return {"velocity": velocity, "angle_of_attack": angle_of_attack, "comparison": results}
+    except Exception as e:
+        logger.error(f"Error in shape comparison: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/shapes/compare")
+async def compare_shapes_post(req: ShapeComparisonRequest):
+    try:
+        results = shape_aero_sim.compare_shapes(req.velocity, req.shapes, req.angle_of_attack, req.rotation_speed)
+        return {"velocity": req.velocity, "angle_of_attack": req.angle_of_attack, "comparison": results}
+    except Exception as e:
+        logger.error(f"Error in shape comparison: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/acoustics/cross-era-comparison")
+async def cross_era_comparison(
+    velocity: float = Query(..., gt=0),
+    rotation_speed: float = Query(100.0),
+    distance: float = Query(1.0),
+    modern_whistle_length: float = Query(0.025),
+    modern_whistle_diameter: float = Query(0.012)
+):
+    try:
+        result = cross_era_comparator.compare(
+            velocity, rotation_speed, distance,
+            modern_whistle_length, modern_whistle_diameter
+        )
+        return result
+    except Exception as e:
+        logger.error(f"Error in cross-era comparison: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/volley/simulate")
+async def simulate_volley(req: VolleySimulationRequest):
+    try:
+        arrows_data = []
+        for a in req.arrows:
+            arrows_data.append({
+                "arrow_id": a.arrow_id,
+                "velocity": a.velocity,
+                "rotation_speed": a.rotation_speed,
+                "whistle_frequency": a.whistle_frequency,
+                "sound_pressure_level": a.sound_pressure_level,
+                "position": tuple(a.position),
+            })
+        result = volley_sim.simulate_volley(
+            arrows=arrows_data,
+            grid_size=req.grid_size,
+            grid_spacing=req.grid_spacing,
+            observer_position=tuple(req.observer_position),
+        )
+        return result
+    except Exception as e:
+        logger.error(f"Error in volley simulation: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/volley/preset")
+async def volley_preset(
+    pattern: str = Query("line", description="齐射阵型: line, wedge, arc, random"),
+    count: int = Query(5, ge=1, le=20),
+    velocity: float = Query(65.0, gt=0),
+    rotation_speed: float = Query(100.0),
+    spacing: float = Query(5.0, gt=0)
+):
+    try:
+        arrows = []
+        acoustics_sim_local = AeroAcousticsSimulator()
+        ac_result = acoustics_sim_local.simulate(velocity, rotation_speed, 1.0)
+
+        if pattern == "line":
+            for i in range(count):
+                x = (i - count / 2) * spacing
+                arrows.append({
+                    "arrow_id": f"volley-{i+1}",
+                    "velocity": velocity,
+                    "rotation_speed": rotation_speed,
+                    "whistle_frequency": ac_result["whistle_frequency"],
+                    "sound_pressure_level": ac_result["sound_pressure_level"],
+                    "position": (x, 0.0),
+                })
+        elif pattern == "wedge":
+            for i in range(count):
+                row = i // 2
+                side = 1 if i % 2 == 0 else -1
+                x = side * (row + 1) * spacing * 0.5
+                y = row * spacing
+                arrows.append({
+                    "arrow_id": f"volley-{i+1}",
+                    "velocity": velocity,
+                    "rotation_speed": rotation_speed,
+                    "whistle_frequency": ac_result["whistle_frequency"],
+                    "sound_pressure_level": ac_result["sound_pressure_level"],
+                    "position": (x, y),
+                })
+        elif pattern == "arc":
+            import random
+            radius = count * spacing / (2 * math.pi)
+            for i in range(count):
+                angle = math.pi * (i / max(count - 1, 1) - 0.5)
+                x = radius * math.sin(angle)
+                y = radius * (1 - math.cos(angle))
+                arrows.append({
+                    "arrow_id": f"volley-{i+1}",
+                    "velocity": velocity + random.uniform(-2, 2),
+                    "rotation_speed": rotation_speed,
+                    "whistle_frequency": ac_result["whistle_frequency"],
+                    "sound_pressure_level": ac_result["sound_pressure_level"],
+                    "position": (x, y),
+                })
+        else:
+            import random
+            for i in range(count):
+                arrows.append({
+                    "arrow_id": f"volley-{i+1}",
+                    "velocity": velocity + random.uniform(-5, 5),
+                    "rotation_speed": rotation_speed + random.uniform(-10, 10),
+                    "whistle_frequency": ac_result["whistle_frequency"],
+                    "sound_pressure_level": ac_result["sound_pressure_level"],
+                    "position": (random.uniform(-count*spacing/2, count*spacing/2), random.uniform(-spacing, spacing)),
+                })
+
+        result = volley_sim.simulate_volley(arrows=arrows, grid_size=40, grid_spacing=2.0, observer_position=(0.0, 50.0))
+        result["pattern"] = pattern
+        return result
+    except Exception as e:
+        logger.error(f"Error in volley preset: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/launch/audio-params")
+async def get_launch_audio_params(
+    velocity: float = Query(65.0, gt=0),
+    launch_angle: float = Query(0.3),
+    rotation_speed: float = Query(100.0),
+    shape_profile: str = Query("conical"),
+    observer_distance: float = Query(10.0)
+):
+    try:
+        result = audio_params.calculate(
+            velocity=velocity,
+            rotation_speed=rotation_speed,
+            shape_profile=shape_profile,
+            distance=observer_distance,
+        )
+        trajectory = aero_sim.calculate_trajectory(velocity, launch_angle, rotation_speed)
+
+        peak_altitude = max((p["altitude"] for p in trajectory), default=0)
+        final_range = trajectory[-1]["x"] if trajectory else 0
+        flight_time = trajectory[-1]["time"] if trajectory else 0
+
+        result["trajectory"] = {
+            "peak_altitude": round(peak_altitude, 1),
+            "estimated_range": round(final_range, 1),
+            "flight_time": round(flight_time, 2),
+            "point_count": len(trajectory),
+        }
+        return result
+    except Exception as e:
+        logger.error(f"Error in launch audio params: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/launch/experience")
+async def launch_experience(req: LaunchExperienceRequest):
+    try:
+        audio = audio_params.calculate(
+            velocity=req.velocity,
+            rotation_speed=req.rotation_speed,
+            shape_profile=req.shape_profile,
+            distance=req.observer_distance,
+        )
+        trajectory = aero_sim.calculate_trajectory(req.velocity, req.launch_angle, req.rotation_speed)
+
+        peak_altitude = max((p["altitude"] for p in trajectory), default=0)
+        final_range = trajectory[-1]["x"] if trajectory else 0
+        flight_time = trajectory[-1]["time"] if trajectory else 0
+
+        aero_result = shape_aero_sim.simulate_shape(
+            req.velocity, req.shape_profile, 0.0, req.rotation_speed
+        )
+        ac_result = acoustics_sim.simulate(req.velocity, req.rotation_speed, req.observer_distance)
+
+        return {
+            "audio": audio,
+            "trajectory_summary": {
+                "peak_altitude": round(peak_altitude, 1),
+                "estimated_range": round(final_range, 1),
+                "flight_time": round(flight_time, 2),
+                "launch_angle": req.launch_angle,
+                "initial_velocity": req.velocity,
+            },
+            "aerodynamics": aero_result,
+            "acoustics": ac_result,
+        }
+    except Exception as e:
+        logger.error(f"Error in launch experience: {e}")
         raise HTTPException(status_code=500, detail=str(e))

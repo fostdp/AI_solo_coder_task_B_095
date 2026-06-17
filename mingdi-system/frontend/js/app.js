@@ -1,6 +1,7 @@
 const API_BASE = "http://localhost:8000/api";
 
 let currentArrow = "MD-001";
+let currentVolleyPattern = "line";
 
 let currentData = {
     velocity: 65,
@@ -21,9 +22,12 @@ let currentData = {
     is_alert: false
 };
 
+let launchAudioData = null;
+
 function init() {
     WHISTLING_ARROW_3D.init('three-canvas');
     setupUI();
+    setupNewFeatureUI();
     WHISTLING_ARROW_3D.updateStreamSurfaces(currentData.velocity);
     WHISTLING_ARROW_3D.setRotationSpeed(currentData.rotation_speed);
     ACOUSTIC_PANEL.drawSoundFieldCanvas('sound-field-canvas', currentData.sound_pressure_level);
@@ -74,6 +78,183 @@ function setupUI() {
         WHISTLING_ARROW_3D.setRotationSpeed(currentData.rotation_speed);
         runSimulation();
     });
+}
+
+function setupNewFeatureUI() {
+    document.querySelectorAll('.nav-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            tab.classList.add('active');
+            document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+        });
+    });
+
+    setupShapeComparisonUI();
+    setupCrossEraUI();
+    setupVolleyUI();
+    setupLaunchUI();
+}
+
+function setupShapeComparisonUI() {
+    const velSlider = document.getElementById('shape-vel');
+    const aoaSlider = document.getElementById('shape-aoa');
+    const rotSlider = document.getElementById('shape-rot');
+
+    if (velSlider) velSlider.addEventListener('input', (e) => {
+        document.getElementById('shape-vel-val').textContent = e.target.value + ' m/s';
+    });
+    if (aoaSlider) aoaSlider.addEventListener('input', (e) => {
+        document.getElementById('shape-aoa-val').textContent = parseFloat(e.target.value).toFixed(2) + ' rad';
+    });
+    if (rotSlider) rotSlider.addEventListener('input', (e) => {
+        document.getElementById('shape-rot-val').textContent = e.target.value + ' rad/s';
+    });
+
+    const runBtn = document.getElementById('run-shape-comparison');
+    if (runBtn) runBtn.addEventListener('click', () => {
+        const vel = parseFloat(document.getElementById('shape-vel').value);
+        const aoa = parseFloat(document.getElementById('shape-aoa').value);
+        const rot = parseFloat(document.getElementById('shape-rot').value);
+        COMPARISON_PANEL.fetchShapeComparison(vel, ["conical", "spherical", "blunt", "ogival"], aoa, rot)
+            .then(data => {
+                if (data && data.comparison) {
+                    COMPARISON_PANEL.drawShapeComparisonChart('shape-comparison-chart', data.comparison);
+                    COMPARISON_PANEL.updateShapeComparisonDisplay(data);
+                }
+            });
+    });
+}
+
+function setupCrossEraUI() {
+    const velSlider = document.getElementById('era-vel');
+    const rotSlider = document.getElementById('era-rot');
+    const distSlider = document.getElementById('era-dist');
+
+    if (velSlider) velSlider.addEventListener('input', (e) => {
+        document.getElementById('era-vel-val').textContent = e.target.value + ' m/s';
+    });
+    if (rotSlider) rotSlider.addEventListener('input', (e) => {
+        document.getElementById('era-rot-val').textContent = e.target.value + ' rad/s';
+    });
+    if (distSlider) distSlider.addEventListener('input', (e) => {
+        document.getElementById('era-dist-val').textContent = e.target.value + ' m';
+    });
+
+    const runBtn = document.getElementById('run-cross-era');
+    if (runBtn) runBtn.addEventListener('click', () => {
+        const vel = parseFloat(document.getElementById('era-vel').value);
+        const rot = parseFloat(document.getElementById('era-rot').value);
+        const dist = parseFloat(document.getElementById('era-dist').value);
+        COMPARISON_PANEL.fetchCrossEraComparison(vel, rot, dist)
+            .then(data => {
+                if (data) {
+                    COMPARISON_PANEL.drawCrossEraChart('cross-era-chart', data);
+                    COMPARISON_PANEL.updateCrossEraDisplay(data);
+                }
+            });
+    });
+}
+
+function setupVolleyUI() {
+    document.querySelectorAll('[data-pattern]').forEach(chip => {
+        chip.addEventListener('click', () => {
+            document.querySelectorAll('[data-pattern]').forEach(c => c.classList.remove('active'));
+            chip.classList.add('active');
+            currentVolleyPattern = chip.dataset.pattern;
+        });
+    });
+
+    const countSlider = document.getElementById('volley-count');
+    const velSlider = document.getElementById('volley-vel');
+    const spacingSlider = document.getElementById('volley-spacing');
+
+    if (countSlider) countSlider.addEventListener('input', (e) => {
+        document.getElementById('volley-count-val').textContent = e.target.value;
+    });
+    if (velSlider) velSlider.addEventListener('input', (e) => {
+        document.getElementById('volley-vel-val').textContent = e.target.value + ' m/s';
+    });
+    if (spacingSlider) spacingSlider.addEventListener('input', (e) => {
+        document.getElementById('volley-spacing-val').textContent = e.target.value + ' m';
+    });
+
+    const runBtn = document.getElementById('run-volley');
+    if (runBtn) runBtn.addEventListener('click', () => {
+        const count = parseInt(document.getElementById('volley-count').value);
+        const vel = parseFloat(document.getElementById('volley-vel').value);
+        const spacing = parseFloat(document.getElementById('volley-spacing').value);
+        VOLLEY_PANEL.fetchVolleyPreset(currentVolleyPattern, count, vel, 100, spacing)
+            .then(data => {
+                if (data) {
+                    VOLLEY_PANEL.drawVolleyField('volley-field-canvas', data);
+                    VOLLEY_PANEL.updateVolleyInfo(data);
+                }
+            });
+    });
+}
+
+function setupLaunchUI() {
+    const angleSlider = document.getElementById('launch-angle');
+    const velSlider = document.getElementById('launch-vel');
+    const rotSlider = document.getElementById('launch-rot');
+    const distSlider = document.getElementById('launch-dist');
+
+    if (angleSlider) angleSlider.addEventListener('input', (e) => {
+        document.getElementById('launch-angle-val').textContent = e.target.value + '°';
+        updateLaunchPreview();
+    });
+    if (velSlider) velSlider.addEventListener('input', (e) => {
+        document.getElementById('launch-vel-val').textContent = e.target.value + ' m/s';
+        updateLaunchPreview();
+    });
+    if (rotSlider) rotSlider.addEventListener('input', (e) => {
+        document.getElementById('launch-rot-val').textContent = e.target.value + ' rad/s';
+    });
+    if (distSlider) distSlider.addEventListener('input', (e) => {
+        document.getElementById('launch-dist-val').textContent = e.target.value + ' m';
+    });
+
+    const playBtn = document.getElementById('play-whistle-btn');
+    if (playBtn) playBtn.addEventListener('click', () => {
+        if (LAUNCH_EXPERIENCE.isPlaying) {
+            LAUNCH_EXPERIENCE.stopWhistle();
+            return;
+        }
+        if (launchAudioData && launchAudioData.audio) {
+            LAUNCH_EXPERIENCE.playWhistleFromParams(launchAudioData.audio);
+        } else {
+            updateLaunchPreview(() => {
+                if (launchAudioData && launchAudioData.audio) {
+                    LAUNCH_EXPERIENCE.playWhistleFromParams(launchAudioData.audio);
+                }
+            });
+        }
+    });
+
+    updateLaunchPreview();
+}
+
+function updateLaunchPreview(callback) {
+    const angle = parseFloat(document.getElementById('launch-angle').value) * Math.PI / 180;
+    const vel = parseFloat(document.getElementById('launch-vel').value);
+    const rot = parseFloat(document.getElementById('launch-rot').value);
+    const shape = document.getElementById('launch-shape').value;
+    const dist = parseFloat(document.getElementById('launch-dist').value);
+
+    LAUNCH_EXPERIENCE.fetchAudioParams(vel, angle, rot, shape, dist)
+        .then(data => {
+            if (data) {
+                launchAudioData = { audio: data, trajectory_summary: data.trajectory || {}, acoustics: {} };
+                LAUNCH_EXPERIENCE.drawTrajectoryPreview('trajectory-canvas', data.trajectory || {}, angle);
+                LAUNCH_EXPERIENCE.updateLaunchDisplay(launchAudioData);
+            }
+            if (callback) callback();
+        })
+        .catch(err => {
+            console.log('Launch preview error:', err);
+            if (callback) callback();
+        });
 }
 
 function runSimulation() {

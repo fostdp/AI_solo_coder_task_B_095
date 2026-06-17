@@ -124,6 +124,68 @@
       },
       "enabled": true,
       "interval_seconds": 90
+    },
+    {
+      "arrow_id": "MD-005",
+      "name": "球形铜首鸣镝",
+      "shape_profile": "spherical",
+      "shape": {
+        "length_m": 0.88,
+        "diameter_m": 0.0100,
+        "mass_kg": 0.035,
+        "whistle_diameter_m": 0.020,
+        "whistle_length_m": 0.038,
+        "fletching_count": 3,
+        "tip_type": "spherical_brass"
+      },
+      "velocity_profile": {
+        "mode": "fixed_range",
+        "initial": [45.0, 65.0],
+        "decay_per_min": 0.88,
+        "jitter_std": 1.8
+      },
+      "rotation_profile": {
+        "initial": [80.0, 130.0],
+        "decay_per_min": 0.93
+      },
+      "launch_angle": [0.25, 0.50],
+      "whistle_tuning": {
+        "strouhal_bias": 0.01,
+        "frequency_offset_hz": -50.0
+      },
+      "enabled": true,
+      "interval_seconds": 75
+    },
+    {
+      "arrow_id": "MD-006",
+      "name": "锥形铁首鸣镝",
+      "shape_profile": "conical",
+      "shape": {
+        "length_m": 0.90,
+        "diameter_m": 0.0085,
+        "mass_kg": 0.028,
+        "whistle_diameter_m": 0.016,
+        "whistle_length_m": 0.032,
+        "fletching_count": 4,
+        "tip_type": "conical_steel"
+      },
+      "velocity_profile": {
+        "mode": "fixed_range",
+        "initial": [60.0, 85.0],
+        "decay_per_min": 0.91,
+        "jitter_std": 2.0
+      },
+      "rotation_profile": {
+        "initial": [110.0, 170.0],
+        "decay_per_min": 0.94
+      },
+      "launch_angle": [0.18, 0.38],
+      "whistle_tuning": {
+        "strouhal_bias": -0.005,
+        "frequency_offset_hz": 80.0
+      },
+      "enabled": true,
+      "interval_seconds": 60
     }
   ],
   "global": {
