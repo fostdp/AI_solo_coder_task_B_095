@@ -1,0 +1,57 @@
+{
+  "arrow": {
+    "mass_kg": 0.025,
+    "length_m": 0.85,
+    "diameter_m": 0.008,
+    "whistle_diameter_m": 0.015,
+    "whistle_length_m": 0.03
+  },
+  "aerodynamics": {
+    "cl_alpha": 1.8,
+    "stall_angle_rad": 0.3,
+    "drag_body_base": 1.2,
+    "drag_body_peak_coeff": 0.3,
+    "drag_body_peak_re": 3000.0,
+    "drag_body_width_re": 8000.0,
+    "drag_aoa_coeff": 4.0,
+    "drag_compressibility_quadratic": 0.4,
+    "drag_compressibility_mach_start": 0.3,
+    "drag_wave_gain": 0.8,
+    "drag_wave_mach_start": 0.8,
+    "drag_wave_peak_width": 3.0,
+    "drag_wave_max": 2.5,
+    "drag_supersonic_base": 1.5,
+    "drag_supersonic_decay": 0.5,
+    "cd_turb_correction_factor": 0.02,
+    "magnus_coefficient": 0.001,
+    "moment_lift_lever": 0.15,
+    "moment_drag_lever": 0.3
+  },
+  "sst_k_omega": {
+    "sigma_k1": 0.85,
+    "sigma_w1": 0.5,
+    "beta1": 0.075,
+    "a1": 0.31,
+    "sigma_k2": 1.0,
+    "sigma_w2": 0.856,
+    "beta2": 0.0828,
+    "kappa": 0.41,
+    "c_mu": 0.09,
+    "turbulence_intensity": 0.05,
+    "turbulence_length_scale_factor": 0.07,
+    "wall_distance_factor": 0.01,
+    "high_re_multiplier": 1.5,
+    "high_re_threshold": 1000000.0,
+    "compressibility_mach_threshold": 0.3,
+    "compressibility_gain": 1.5
+  },
+  "trajectory": {
+    "dt_seconds": 0.01,
+    "max_time_seconds": 15.0,
+    "spin_decay_rate": 0.005,
+    "equilibrium_rotation_base": 80.0,
+    "equilibrium_rotation_coeff": 0.5,
+    "rotation_convergence_rate": 0.01,
+    "gravity": 9.81
+  }
+}

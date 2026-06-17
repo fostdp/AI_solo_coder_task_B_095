@@ -1,12 +1,6 @@
 const API_BASE = "http://localhost:8000/api";
 
-let scene, camera, renderer, controls;
-let arrowGroup = null;
-let streamSurfaces = [];
-let soundFieldMesh = null;
-let animationId = null;
 let currentArrow = "MD-001";
-let currentView = "3d";
 
 let currentData = {
     velocity: 65,
@@ -23,471 +17,27 @@ let currentData = {
     lift_coefficient: 0.15,
     moment: 0.02,
     strouhal_number: 0.2,
-    propagation_distance: 500
+    propagation_distance: 500,
+    is_alert: false
 };
 
 function init() {
-    const canvas = document.getElementById('three-canvas');
-    const container = canvas.parentElement;
-
-    scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x050810);
-    scene.fog = new THREE.Fog(0x050810, 20, 60);
-
-    camera = new THREE.PerspectiveCamera(60, container.clientWidth / container.clientHeight, 0.1, 1000);
-    camera.position.set(8, 4, 10);
-
-    renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
-    renderer.setSize(container.clientWidth, container.clientHeight);
-    renderer.setPixelRatio(window.devicePixelRatio);
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-
-    controls = new THREE.OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
-    controls.dampingFactor = 0.05;
-
-    addLights();
-    createGround();
-    createArrow();
-    createStreamlines();
-    createSoundField();
-
-    window.addEventListener('resize', onWindowResize);
+    WHISTLING_ARROW_3D.init('three-canvas');
     setupUI();
-
-    animate();
-
+    WHISTLING_ARROW_3D.updateStreamSurfaces(currentData.velocity);
+    WHISTLING_ARROW_3D.setRotationSpeed(currentData.rotation_speed);
+    ACOUSTIC_PANEL.drawSoundFieldCanvas('sound-field-canvas', currentData.sound_pressure_level);
     setInterval(fetchData, 2000);
     fetchConfig();
     fetchData();
 }
 
-function addLights() {
-    const ambient = new THREE.AmbientLight(0x404060, 0.5);
-    scene.add(ambient);
-
-    const dirLight = new THREE.DirectionalLight(0xffffff, 1);
-    dirLight.position.set(10, 20, 10);
-    dirLight.castShadow = true;
-    dirLight.shadow.mapSize.width = 2048;
-    dirLight.shadow.mapSize.height = 2048;
-    scene.add(dirLight);
-
-    const fillLight = new THREE.DirectionalLight(0x6688ff, 0.3);
-    fillLight.position.set(-10, 5, -10);
-    scene.add(fillLight);
-}
-
-function createGround() {
-    const groundGeo = new THREE.PlaneGeometry(50, 50, 50, 50);
-    const groundMat = new THREE.MeshStandardMaterial({
-        color: 0x1a2338,
-        roughness: 0.8,
-        metalness: 0.2,
-        wireframe: false
-    });
-
-    const positions = groundGeo.attributes.position;
-    for (let i = 0; i < positions.count; i++) {
-        const x = positions.getX(i);
-        const z = positions.getZ(i);
-        const y = Math.sin(x * 0.2) * 0.1 + Math.cos(z * 0.2) * 0.1;
-        positions.setY(i, y);
-    }
-    groundGeo.computeVertexNormals();
-
-    const ground = new THREE.Mesh(groundGeo, groundMat);
-    ground.rotation.x = -Math.PI / 2;
-    ground.position.y = -2;
-    ground.receiveShadow = true;
-    scene.add(ground);
-
-    const gridHelper = new THREE.GridHelper(50, 50, 0x2a3a5c, 0x1a2338);
-    gridHelper.position.y = -1.99;
-    scene.add(gridHelper);
-}
-
-function createArrow() {
-    arrowGroup = new THREE.Group();
-
-    const arrowLength = 4;
-    const shaftRadius = 0.06;
-    const tipLength = 0.8;
-
-    const shaftGeo = new THREE.CylinderGeometry(shaftRadius, shaftRadius, arrowLength - tipLength, 16);
-    const shaftMat = new THREE.MeshStandardMaterial({
-        color: 0xd4a574,
-        roughness: 0.6,
-        metalness: 0.3
-    });
-    const shaft = new THREE.Mesh(shaftGeo, shaftMat);
-    shaft.position.y = (arrowLength - tipLength) / 2 - arrowLength / 2 + tipLength / 2;
-    shaft.castShadow = true;
-    shaft.receiveShadow = true;
-    arrowGroup.add(shaft);
-
-    const tipGeo = new THREE.ConeGeometry(shaftRadius * 1.5, tipLength, 16);
-    const tipMat = new THREE.MeshStandardMaterial({
-        color: 0x8b7355,
-        roughness: 0.4,
-        metalness: 0.6
-    });
-    const tip = new THREE.Mesh(tipGeo, tipMat);
-    tip.position.y = (arrowLength - tipLength) / 2;
-    tip.castShadow = true;
-    arrowGroup.add(tip);
-
-    const whistleGeo = new THREE.CylinderGeometry(0.12, 0.12, 0.3, 16);
-    const whistleMat = new THREE.MeshStandardMaterial({
-        color: 0xffd700,
-        roughness: 0.3,
-        metalness: 0.8,
-        emissive: 0x332200,
-        emissiveIntensity: 0.2
-    });
-    const whistle = new THREE.Mesh(whistleGeo, whistleMat);
-    whistle.position.y = arrowLength / 2 - 0.8;
-    whistle.castShadow = true;
-    arrowGroup.add(whistle);
-
-    for (let i = 0; i < 3; i++) {
-        const holeAngle = (i / 3) * Math.PI * 2;
-        const holeGeo = new THREE.CylinderGeometry(0.04, 0.04, 0.25, 8);
-        const holeMat = new THREE.MeshStandardMaterial({
-            color: 0x1a1a1a,
-            roughness: 0.9
-        });
-        const hole = new THREE.Mesh(holeGeo, holeMat);
-        hole.position.set(
-            Math.cos(holeAngle) * 0.09,
-            arrowLength / 2 - 0.8,
-            Math.sin(holeAngle) * 0.09
-        );
-        hole.rotation.z = Math.PI / 2;
-        hole.rotation.y = holeAngle;
-        arrowGroup.add(hole);
-    }
-
-    const fletchingCount = 3;
-    const fletchLength = 0.6;
-    const fletchHeight = 0.15;
-
-    for (let i = 0; i < fletchingCount; i++) {
-        const angle = (i / fletchingCount) * Math.PI * 2;
-        const fletchShape = new THREE.Shape();
-        fletchShape.moveTo(0, 0);
-        fletchShape.quadraticCurveTo(fletchLength / 2, fletchHeight * 0.8, fletchLength, 0);
-        fletchShape.lineTo(fletchLength * 0.7, -fletchHeight * 0.3);
-        fletchShape.lineTo(0, 0);
-
-        const fletchGeo = new THREE.ExtrudeGeometry(fletchShape, {
-            depth: 0.01,
-            bevelEnabled: false
-        });
-
-        const fletchMat = new THREE.MeshStandardMaterial({
-            color: 0x2a3a5c,
-            side: THREE.DoubleSide,
-            roughness: 0.7
-        });
-
-        const fletch = new THREE.Mesh(fletchGeo, fletchMat);
-        fletch.position.set(
-            Math.cos(angle) * shaftRadius,
-            -arrowLength / 2 + 0.4,
-            Math.sin(angle) * shaftRadius
-        );
-        fletch.rotation.y = angle;
-        fletch.rotation.x = -Math.PI / 2;
-        fletch.castShadow = true;
-        arrowGroup.add(fletch);
-    }
-
-    arrowGroup.rotation.z = Math.PI / 2;
-    arrowGroup.rotation.y = -0.3;
-    arrowGroup.position.x = 0;
-    scene.add(arrowGroup);
-}
-
-function createStreamlines() {
-    const ribbonCount = 10;
-    const pointsPerRibbon = 50;
-    const ribbonWidth = 0.25;
-
-    for (let r = 0; r < ribbonCount; r++) {
-        const yStart = -3 + (6 * r / (ribbonCount - 1));
-
-        let x = -8, y = yStart;
-        const pathPoints = [];
-        const speedFactors = [];
-
-        for (let j = 0; j < pointsPerRibbon; j++) {
-            const speedFactor = 1.0 - 0.4 * Math.exp(-(y * y / 4));
-            pathPoints.push(new THREE.Vector3(x, y, 0));
-            speedFactors.push(speedFactor);
-
-            const vx = 1.0 * speedFactor;
-            const vy = 0.05 * Math.sin(x * 0.3) + 0.02 * y;
-
-            x += vx * 0.25;
-            y += vy * 0.25;
-
-            if (x > 8) break;
-        }
-
-        if (pathPoints.length < 3) continue;
-
-        const vertices = [];
-        const colors = [];
-        const indices = [];
-
-        for (let i = 0; i < pathPoints.length; i++) {
-            const p = pathPoints[i];
-            const sf = speedFactors[i];
-
-            let tangent;
-            if (i === 0) {
-                tangent = new THREE.Vector3().subVectors(pathPoints[1], pathPoints[0]).normalize();
-            } else if (i === pathPoints.length - 1) {
-                tangent = new THREE.Vector3().subVectors(pathPoints[i], pathPoints[i - 1]).normalize();
-            } else {
-                tangent = new THREE.Vector3().subVectors(pathPoints[i + 1], pathPoints[i - 1]).normalize();
-            }
-
-            const normal = new THREE.Vector3(-tangent.y, tangent.x, 0).normalize();
-
-            const halfWidth = ribbonWidth * 0.5 * (0.4 + 0.6 * sf);
-
-            const p1 = new THREE.Vector3().copy(p).addScaledVector(normal, halfWidth);
-            const p2 = new THREE.Vector3().copy(p).addScaledVector(normal, -halfWidth);
-
-            vertices.push(p1.x, p1.y, p1.z);
-            vertices.push(p2.x, p2.y, p2.z);
-
-            const t = sf;
-            const color1 = new THREE.Color();
-            color1.setRGB(0.2 + t * 0.3, 0.5 + t * 0.2, 0.9 - t * 0.1);
-            colors.push(color1.r, color1.g, color1.b);
-            colors.push(color1.r, color1.g, color1.b);
-
-            if (i < pathPoints.length - 1) {
-                const base = i * 2;
-                indices.push(base, base + 1, base + 2);
-                indices.push(base + 1, base + 3, base + 2);
-            }
-        }
-
-        const geometry = new THREE.BufferGeometry();
-        geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-        geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-        geometry.setIndex(indices);
-        geometry.computeVertexNormals();
-
-        const material = new THREE.MeshBasicMaterial({
-            vertexColors: true,
-            transparent: true,
-            opacity: 0.45,
-            side: THREE.DoubleSide,
-            depthWrite: false
-        });
-
-        const ribbon = new THREE.Mesh(geometry, material);
-        ribbon.visible = false;
-        streamSurfaces.push(ribbon);
-        scene.add(ribbon);
-    }
-}
-
-function createSoundField() {
-    const size = 10;
-    const segments = 50;
-    const geometry = new THREE.PlaneGeometry(size, size, segments, segments);
-
-    const material = new THREE.MeshBasicMaterial({
-        vertexColors: true,
-        transparent: true,
-        opacity: 0.3,
-        side: THREE.DoubleSide
-    });
-
-    soundFieldMesh = new THREE.Mesh(geometry, material);
-    soundFieldMesh.rotation.x = -Math.PI / 2;
-    soundFieldMesh.position.y = -1.9;
-    soundFieldMesh.visible = false;
-    scene.add(soundFieldMesh);
-
-    updateSoundField(85);
-}
-
-function updateSoundField(spl) {
-    if (!soundFieldMesh) return;
-
-    const geometry = soundFieldMesh.geometry;
-    const positions = geometry.attributes.position;
-    const colors = [];
-
-    const centerX = 0, centerZ = 0;
-    const maxDist = 5;
-
-    for (let i = 0; i < positions.count; i++) {
-        const x = positions.getX(i);
-        const z = positions.getZ(i);
-        const dist = Math.sqrt(x * x + z * z);
-
-        const normalizedDist = Math.min(dist / maxDist, 1);
-        const localSpl = spl - 20 * Math.log10(Math.max(dist, 0.1)) + Math.random() * 2;
-
-        const t = Math.max(0, Math.min(1, (localSpl - 40) / 60));
-
-        const color = new THREE.Color();
-        if (t < 0.25) {
-            color.setRGB(0, 0.1, 0.3 + t);
-        } else if (t < 0.5) {
-            const tt = (t - 0.25) / 0.25;
-            color.setRGB(0, 0.2 + tt * 0.6, 0.6 - tt * 0.3);
-        } else if (t < 0.75) {
-            const tt = (t - 0.5) / 0.25;
-            color.setRGB(tt, 0.8 - tt * 0.3, 0.3 - tt * 0.2);
-        } else {
-            const tt = (t - 0.75) / 0.25;
-            color.setRGB(1, 0.5 - tt * 0.4, 0.1 - tt * 0.1);
-        }
-
-        colors.push(color.r, color.g, color.b);
-    }
-
-    geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-    geometry.attributes.color.needsUpdate = true;
-}
-
-function updateStreamSurfaces(velocity) {
-    streamSurfaces.forEach((ribbon, r) => {
-        const ribbonCount = streamSurfaces.length;
-        const yStart = -3 + (6 * r / (ribbonCount - 1));
-        const factor = velocity / 65;
-        const ribbonWidth = 0.25;
-
-        let x = -8, y = yStart;
-        const pathPoints = [];
-        const speedFactors = [];
-
-        for (let j = 0; j < 50; j++) {
-            const speedFactor = 1.0 - 0.4 * Math.exp(-(y * y / 4));
-            pathPoints.push({ x, y });
-            speedFactors.push(speedFactor);
-
-            const vx = factor * speedFactor;
-            const vy = 0.05 * Math.sin(x * 0.3) + 0.02 * y;
-
-            x += vx * 0.25;
-            y += vy * 0.25;
-
-            if (x > 8) break;
-        }
-
-        if (pathPoints.length < 3) return;
-
-        const vertices = [];
-        const colors = [];
-        const indices = [];
-
-        for (let i = 0; i < pathPoints.length; i++) {
-            const p = pathPoints[i];
-            const sf = speedFactors[i];
-
-            let tx, ty;
-            if (i === 0) {
-                tx = pathPoints[1].x - pathPoints[0].x;
-                ty = pathPoints[1].y - pathPoints[0].y;
-            } else if (i === pathPoints.length - 1) {
-                tx = pathPoints[i].x - pathPoints[i - 1].x;
-                ty = pathPoints[i].y - pathPoints[i - 1].y;
-            } else {
-                tx = pathPoints[i + 1].x - pathPoints[i - 1].x;
-                ty = pathPoints[i + 1].y - pathPoints[i - 1].y;
-            }
-            const len = Math.sqrt(tx * tx + ty * ty) || 1;
-            const nx = -ty / len;
-            const ny = tx / len;
-
-            const halfWidth = ribbonWidth * 0.5 * (0.4 + 0.6 * sf);
-
-            vertices.push(p.x + nx * halfWidth, p.y + ny * halfWidth, 0);
-            vertices.push(p.x - nx * halfWidth, p.y - ny * halfWidth, 0);
-
-            const t = sf;
-            colors.push(0.2 + t * 0.3, 0.5 + t * 0.2, 0.9 - t * 0.1);
-            colors.push(0.2 + t * 0.3, 0.5 + t * 0.2, 0.9 - t * 0.1);
-
-            if (i < pathPoints.length - 1) {
-                const base = i * 2;
-                indices.push(base, base + 1, base + 2);
-                indices.push(base + 1, base + 3, base + 2);
-            }
-        }
-
-        const posAttr = ribbon.geometry.attributes.position;
-        if (posAttr && posAttr.count === vertices.length / 3) {
-            posAttr.array.set(new Float32BufferAttribute(vertices, 3).array);
-            posAttr.needsUpdate = true;
-            ribbon.geometry.attributes.color.array.set(new Float32BufferAttribute(colors, 3).array);
-            ribbon.geometry.attributes.color.needsUpdate = true;
-            ribbon.geometry.computeVertexNormals();
-        } else {
-            ribbon.geometry.dispose();
-            const newGeo = new THREE.BufferGeometry();
-            newGeo.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-            newGeo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-            newGeo.setIndex(indices);
-            newGeo.computeVertexNormals();
-            ribbon.geometry = newGeo;
-        }
-    });
-}
-
-function animate() {
-    animationId = requestAnimationFrame(animate);
-
-    if (arrowGroup) {
-        arrowGroup.rotation.x += currentData.rotation_speed * 0.001;
-        arrowGroup.position.y = Math.sin(Date.now() * 0.001) * 0.2;
-    }
-
-    controls.update();
-    renderer.render(scene, camera);
-}
-
-function onWindowResize() {
-    const container = document.getElementById('three-canvas').parentElement;
-    camera.aspect = container.clientWidth / container.clientHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(container.clientWidth, container.clientHeight);
-}
-
-function setView(view) {
-    currentView = view;
-    document.querySelectorAll('.view-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.view === view);
-    });
-
-    streamSurfaces.forEach(ribbon => {
-        ribbon.visible = (view === 'flow' || view === '3d');
-    });
-
-    if (soundFieldMesh) {
-        soundFieldMesh.visible = (view === 'acoustic' || view === '3d');
-        soundFieldMesh.material.opacity = view === 'acoustic' ? 0.6 : 0.2;
-    }
-
-    if (arrowGroup) {
-        arrowGroup.visible = (view === '3d' || view === 'flow' || view === 'acoustic');
-    }
-}
-
 function setupUI() {
     document.querySelectorAll('.view-btn').forEach(btn => {
-        btn.addEventListener('click', () => setView(btn.dataset.view));
+        btn.addEventListener('click', () => {
+            WHISTLING_ARROW_3D.setView(btn.dataset.view);
+            document.querySelectorAll('.view-btn').forEach(b => b.classList.toggle('active', b.dataset.view === btn.dataset.view));
+        });
     });
 
     document.querySelectorAll('.arrow-chip').forEach(chip => {
@@ -504,7 +54,7 @@ function setupUI() {
         const val = e.target.value;
         document.getElementById('vel-control-val').textContent = val + ' m/s';
         currentData.velocity = parseFloat(val);
-        updateStreamSurfaces(currentData.velocity);
+        WHISTLING_ARROW_3D.updateStreamSurfaces(currentData.velocity);
         runSimulation();
     });
 
@@ -521,6 +71,7 @@ function setupUI() {
         const val = e.target.value;
         document.getElementById('rot-control-val').textContent = val + ' rad/s';
         currentData.rotation_speed = parseFloat(val);
+        WHISTLING_ARROW_3D.setRotationSpeed(currentData.rotation_speed);
         runSimulation();
     });
 }
@@ -535,7 +86,7 @@ function runSimulation() {
             currentData.reynolds_number = data.reynolds_number;
             currentData.drag_coefficient = data.drag_coefficient;
             currentData.lift_coefficient = data.lift_coefficient;
-            updateUI();
+            updateAeroUI();
         })
         .catch(err => console.log('Aero sim error:', err));
 
@@ -546,9 +97,9 @@ function runSimulation() {
             currentData.sound_pressure_level = data.sound_pressure_level;
             currentData.propagation_distance = data.propagation_distance;
             currentData.strouhal_number = data.strouhal_number;
-            updateSoundField(currentData.sound_pressure_level);
-            drawSoundFieldCanvas();
-            updateUI();
+            WHISTLING_ARROW_3D.updateSoundField(currentData.sound_pressure_level);
+            ACOUSTIC_PANEL.drawSoundFieldCanvas('sound-field-canvas', currentData.sound_pressure_level);
+            ACOUSTIC_PANEL.updateAcousticsDisplay(currentData);
         })
         .catch(err => console.log('Acoustics sim error:', err));
 }
@@ -562,16 +113,19 @@ function fetchData() {
         .then(data => {
             currentData.velocity = data.velocity;
             currentData.rotation_speed = data.rotation_speed;
-            currentData.altitude = data.altitude;
+            currentData.altitude = data.altitude || 0;
             currentData.whistle_frequency = data.whistle_frequency;
             currentData.sound_pressure_level = data.sound_pressure_level;
             currentData.estimated_range = data.estimated_range;
-            currentData.is_alert = data.is_alert;
+            currentData.is_alert = data.is_alert || false;
 
-            updateStreamSurfaces(currentData.velocity);
-            updateSoundField(currentData.sound_pressure_level);
-            drawSoundFieldCanvas();
-            updateUI();
+            WHISTLING_ARROW_3D.updateStreamSurfaces(currentData.velocity);
+            WHISTLING_ARROW_3D.setRotationSpeed(currentData.rotation_speed);
+            WHISTLING_ARROW_3D.updateSoundField(currentData.sound_pressure_level);
+            ACOUSTIC_PANEL.drawSoundFieldCanvas('sound-field-canvas', currentData.sound_pressure_level);
+            ACOUSTIC_PANEL.updateAcousticsDisplay(currentData);
+            updateAeroUI();
+            updateGenericUI();
             updateConnectionStatus(true);
         })
         .catch(err => {
@@ -585,93 +139,47 @@ function fetchData() {
 function fetchConfig() {
     fetch(`${API_BASE}/config`)
         .then(r => r.json())
-        .then(data => {
-            console.log('Config loaded:', data);
-        })
+        .then(data => console.log('Config loaded:', data))
         .catch(err => console.log('Config error:', err));
 }
 
 function fetchAlerts() {
     fetch(`${API_BASE}/alerts?arrow_id=${currentArrow}&limit=10`)
         .then(r => r.json())
-        .then(data => {
-            updateAlertsList(data.alerts || []);
-        })
-        .catch(err => {
-            console.log('Alerts error:', err);
-        });
+        .then(data => ACOUSTIC_PANEL.updateAlertsList(data.alerts || []))
+        .catch(err => console.log('Alerts error:', err));
 }
 
-function updateUI() {
-    document.getElementById('velocity').textContent = currentData.velocity.toFixed(2);
-    document.getElementById('rotation-speed').textContent = currentData.rotation_speed.toFixed(2);
-    document.getElementById('altitude').textContent = currentData.altitude.toFixed(2);
-    document.getElementById('pitch').textContent = currentData.pitch.toFixed(4);
-    document.getElementById('range').textContent = currentData.estimated_range
+function updateAeroUI() {
+    const el = (id) => document.getElementById(id);
+    if (!el('reynolds')) return;
+    el('reynolds').textContent = Math.round(currentData.reynolds_number).toLocaleString();
+    el('drag-force').textContent = currentData.drag_force.toFixed(3);
+    el('lift-force').textContent = currentData.lift_force.toFixed(3);
+    el('drag-coef').textContent = currentData.drag_coefficient.toFixed(3);
+    el('lift-coef').textContent = currentData.lift_coefficient.toFixed(3);
+    el('moment').textContent = currentData.moment.toFixed(3);
+}
+
+function updateGenericUI() {
+    const el = (id) => document.getElementById(id);
+    if (!el('velocity')) return;
+    el('velocity').textContent = currentData.velocity.toFixed(2);
+    el('rotation-speed').textContent = currentData.rotation_speed.toFixed(2);
+    el('altitude').textContent = (currentData.altitude || 0).toFixed(2);
+    el('pitch').textContent = currentData.pitch.toFixed(4);
+    el('range').textContent = currentData.estimated_range
         ? currentData.estimated_range.toFixed(1)
         : '—';
-
-    document.getElementById('whistle-freq').textContent = currentData.whistle_frequency.toFixed(1);
-    document.getElementById('spl').textContent = currentData.sound_pressure_level.toFixed(1);
-    document.getElementById('prop-distance').textContent = currentData.propagation_distance.toFixed(1);
-    document.getElementById('strouhal').textContent = currentData.strouhal_number.toFixed(3);
-    document.getElementById('reynolds').textContent = Math.round(currentData.reynolds_number).toLocaleString();
-
-    document.getElementById('drag-force').textContent = currentData.drag_force.toFixed(3);
-    document.getElementById('lift-force').textContent = currentData.lift_force.toFixed(3);
-    document.getElementById('drag-coef').textContent = currentData.drag_coefficient.toFixed(3);
-    document.getElementById('lift-coef').textContent = currentData.lift_coefficient.toFixed(3);
-    document.getElementById('moment').textContent = currentData.moment.toFixed(3);
-
-    const splPercent = Math.min(100, Math.max(0, (currentData.sound_pressure_level - 40) / 80 * 100));
-    document.getElementById('spl-bar').style.width = splPercent + '%';
-
-    const rangeEl = document.getElementById('range');
-    if (currentData.estimated_range < 150) {
-        rangeEl.classList.add('alert');
-    } else {
-        rangeEl.classList.remove('alert');
-    }
-}
-
-function updateAlertsList(alerts) {
-    const container = document.getElementById('alerts-list');
-
-    if (alerts.length === 0) {
-        container.innerHTML = '<div style="color: #4a5568; font-size: 12px; text-align: center; padding: 20px 0;">暂无告警</div>';
-        return;
-    }
-
-    container.innerHTML = alerts.map(alert => `
-        <div class="alert-item ${alert.severity === 'critical' ? 'critical' : 'warning'}">
-            <div class="alert-type">${alertTypeLabel(alert.alert_type)}</div>
-            <div class="alert-msg">${alert.message}</div>
-            <div class="alert-time">${formatTime(alert.timestamp)}</div>
-        </div>
-    `).join('');
-}
-
-function alertTypeLabel(type) {
-    const labels = {
-        'frequency_low': '哨音频率偏低',
-        'frequency_high': '哨音频率偏高',
-        'range_insufficient': '射程不足',
-        'spl_low': '声压级偏低'
-    };
-    return labels[type] || type;
-}
-
-function formatTime(isoString) {
-    try {
-        const date = new Date(isoString);
-        return date.toLocaleTimeString('zh-CN');
-    } catch {
-        return isoString;
+    const rangeEl = el('range');
+    if (rangeEl) {
+        rangeEl.classList.toggle('alert', (currentData.estimated_range || 999) < 150);
     }
 }
 
 function updateConnectionStatus(online) {
     const statusEl = document.getElementById('connection-status');
+    if (!statusEl) return;
     if (online) {
         statusEl.textContent = '● 系统在线';
         statusEl.className = 'status-badge online';
@@ -679,68 +187,8 @@ function updateConnectionStatus(online) {
         statusEl.textContent = '● 离线模式';
         statusEl.className = 'status-badge';
     }
-
     const countEl = document.getElementById('sensor-count');
-    countEl.textContent = '传感器: 3';
-}
-
-function drawSoundFieldCanvas() {
-    const canvas = document.getElementById('sound-field-canvas');
-    const ctx = canvas.getContext('2d');
-    const w = canvas.width = 240;
-    const h = canvas.height = 180;
-
-    ctx.fillStyle = '#0a0e17';
-    ctx.fillRect(0, 0, w, h);
-
-    const centerX = w / 2;
-    const centerY = h / 2;
-    const maxR = Math.min(w, h) * 0.45;
-
-    const maxSpl = currentData.sound_pressure_level;
-
-    for (let r = maxR; r > 0; r -= 1) {
-        const distRatio = r / maxR;
-        const dist = distRatio * 10;
-        const spl = maxSpl - 20 * Math.log10(Math.max(dist, 0.1));
-        const t = Math.max(0, Math.min(1, (spl - 40) / 60));
-
-        let rC, gC, bC;
-        if (t < 0.25) {
-            rC = 0; gC = 25; bC = 80 + t * 680;
-        } else if (t < 0.5) {
-            const tt = (t - 0.25) / 0.25;
-            rC = 0; gC = 50 + tt * 150; bC = 150 - tt * 75;
-        } else if (t < 0.75) {
-            const tt = (t - 0.5) / 0.25;
-            rC = tt * 255; gC = 200 - tt * 75; bC = 75 - tt * 50;
-        } else {
-            const tt = (t - 0.75) / 0.25;
-            rC = 255; gC = 125 - tt * 100; bC = 25 - tt * 25;
-        }
-
-        ctx.beginPath();
-        ctx.arc(centerX, centerY, r, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(${Math.round(rC)}, ${Math.round(gC)}, ${Math.round(bC)}, 0.6)`;
-        ctx.fill();
-    }
-
-    ctx.fillStyle = '#ffd700';
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, 4, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.fillStyle = '#ffd700';
-    ctx.font = '10px Consolas, monospace';
-    ctx.fillText(`${maxSpl.toFixed(0)} dB`, centerX + 10, centerY - 10);
-
-    ctx.strokeStyle = '#2a3a5c';
-    ctx.lineWidth = 1;
-    ctx.setLineDash([2, 2]);
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, maxR * 0.5, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.setLineDash([]);
+    if (countEl) countEl.textContent = '传感器: 3';
 }
 
 window.addEventListener('load', init);

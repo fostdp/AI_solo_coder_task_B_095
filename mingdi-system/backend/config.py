@@ -19,6 +19,10 @@ class Settings(BaseSettings):
     mqtt_port: int = int(os.getenv("MQTT_PORT", "1883"))
     mqtt_topic_alerts: str = os.getenv("MQTT_TOPIC_ALERTS", "mingdi/alerts")
 
+    redis_host: str = os.getenv("REDIS_HOST", "localhost")
+    redis_port: int = int(os.getenv("REDIS_PORT", "6379"))
+    redis_db: int = int(os.getenv("REDIS_DB", "0"))
+
     alert_frequency_min: float = 800.0
     alert_frequency_max: float = 2500.0
     alert_range_min: float = 150.0

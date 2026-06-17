@@ -1,0 +1,35 @@
+{
+  "environment": {
+    "air_density_kg_m3": 1.225,
+    "air_viscosity_pa_s": 1.81e-5,
+    "speed_of_sound_m_s": 343.0,
+    "reference_pressure_pa": 2e-5,
+    "reference_intensity_w_m2": 1e-12
+  },
+  "whistle": {
+    "strouhal_number": 0.2,
+    "cavity_end_correction": 0.3,
+    "vortex_weight": 0.5,
+    "cavity_weight": 0.5,
+    "power_coeff_linear_re": 1e-7,
+    "power_coeff_turbulent": 1e-6,
+    "power_turbulent_re_threshold": 1000.0,
+    "power_turbulent_exponent": 0.5,
+    "rotation_power_contrib": 0.1,
+    "spl_threshold_dba": 20.0
+  },
+  "fwh_equation": {
+    "thickness_velocity_frac": 0.01,
+    "thickness_rotation_frac": 0.002,
+    "thickness_surface_area_frac": 0.3,
+    "loading_pressure_coeff": 0.8,
+    "loading_surface_area_frac": 0.3,
+    "loading_near_field_gain": 2.0,
+    "loading_harmonic_2gain": 0.3,
+    "quadrupole_mach_threshold": 0.3,
+    "quadrupole_mach_correction_cap": 10.0,
+    "near_field_radius_factor": 2.0,
+    "directivity_h1": 0.3,
+    "directivity_h2": 0.1
+  }
+}
